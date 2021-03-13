@@ -45,7 +45,7 @@ namespace BetterContinents
                 return settings;
             }
             
-            public static BetterContinentsSettings Disabled(long worldUId)
+            public static BetterContinentsSettings Disabled(long worldUId = -1)
             {
                 var settings = Create(worldUId);
                 settings.EnabledForThisWorld = false;
@@ -72,6 +72,10 @@ namespace BetterContinents
                 RidgeBlendSigmoidXOffset = Mathf.Lerp(1f, 0.35f, ConfigRidgeAmount.Value);
             }
             
+            private static float FeatureScaleCurve(float x) => ScaleRange(Gamma(x, 0.726965071031f), 0.2f, 3f);
+            private static float Gamma(float x, float h) => Mathf.Pow(x, Mathf.Pow(1 - h * 0.5f + 0.25f, 6f));
+            private static float ScaleRange(float g, float n, float m) => n + (m - n) * (1 - g); 
+
             public void Dump()
             {
                 Debug.Log($"[BetterContinents] Version {Version}");
@@ -161,20 +165,22 @@ namespace BetterContinents
             Debug.Log("[BetterContinents] Awake");
         }
 
-        // When the world metadata is saved we write an extra file next to it for our own config
-        [HarmonyPatch(typeof(World), "SaveWorldMetaData")]
-        private class WorldSaveWorldMetaDataPatch
+        
+        [HarmonyPatch(typeof(World))]
+        private class WorldPatch
         {
-            private static void Postfix(World __instance)
+            // When the world metadata is saved we write an extra file next to it for our own config
+            [HarmonyPostfix, HarmonyPatch("SaveWorldMetaData")]
+            private static void SaveWorldMetaDataPostfix(World __instance)
             {
-                Debug.Log($"[BetterContinents] Saving BetterContinents settings for {__instance.m_name}");
+                Debug.Log($"[BetterContinents] Saving settings for {__instance.m_name}");
 
                 // Check if this world has been saved before (the main world data file should exist)
                 if (!File.Exists(__instance.GetDBPath()))
                 {
                     // First time save, so bake our settings as they currently are
-                    Debug.Log($"[BetterContinents] First time save of {__instance.m_name}, baking BetterContinents settings");
-                    Settings = BetterContinentsSettings.Create(__instance.m_uid);
+                    Debug.Log($"[BetterContinents] First time save of {__instance.m_name}, baking settings");
+                    AllSettings[__instance.m_uid] = Settings = BetterContinentsSettings.Create(__instance.m_uid);
                 }
 
                 var zpackage = new ZPackage();
@@ -200,78 +206,106 @@ namespace BetterContinents
                 }
                 File.Move(newName, ourMetaPath);
             }
-        }
-        
-        // When the world is loaded we read an extra file next to it for our own config
-        [HarmonyPatch(typeof(World), "LoadWorld")]
-        private class WorldLoadWorldPatch
-        {
-            private static void Prefix(string name)
+
+            // When the world is loaded we read an extra file next to it for our own config
+            [HarmonyPostfix, HarmonyPatch("LoadWorld")]
+            private static void LoadWorldPostfix(World __result)
             {
-                Debug.Log($"[BetterContinents] Loading BetterContinents settings for {name}");
+                if (__result.m_loadError || __result.m_versionError)
+                {
+                    return;
+                }
+                Debug.Log($"[BetterContinents] Loading settings for {__result.m_name}");
 
                 try
                 {
-                    using (var binaryReader = new BinaryReader(File.OpenRead(World.GetMetaPath(name) + ".BetterContinents")))
+                    using (var binaryReader = new BinaryReader(File.OpenRead(__result.GetMetaPath() + ".BetterContinents")))
                     {
                         int count = binaryReader.ReadInt32();
-                        var newSettings = BetterContinentsSettings.Load(new ZPackage(binaryReader.ReadBytes(count))); 
-                        AllSettings[newSettings.WorldUId] = newSettings;
+                        var newSettings = BetterContinentsSettings.Load(new ZPackage(binaryReader.ReadBytes(count)));
+                        if (newSettings.WorldUId != __result.m_uid)
+                        {
+                            Debug.LogError($"[BetterContinents] ID in saved settings for {__result.m_name} didn't match, mod is disabled for this World");
+                        }
+                        else
+                        {
+                            AllSettings[newSettings.WorldUId] = newSettings;
+                        }
                     }
                 }
                 catch
                 {
-                    Debug.LogError($"[BetterContinents] Loading BetterContinents settings for {name} failed, mod is disabled for this World");
+                    Debug.LogError($"[BetterContinents] Loading settings for {__result.m_name} failed, mod is disabled for this World");
                     return;
                 }
             }
-        }
-        
-        // When the world is set on the server (applies to single player as well), we should select the correct loaded settings
-        [HarmonyPatch(typeof(ZNet), "SetServer")]
-        private class ZNetSetServerPatch
-        {
-            private static void Prefix(World world)
+            
+            [HarmonyPostfix, HarmonyPatch("RemoveWorld")]
+            private static void RemoveWorldPostfix(string name)
             {
-                Debug.Log($"[BetterContinents] Selected world {world.m_name}, applying settings");
-                if (!AllSettings.TryGetValue(world.m_uid, out Settings))
+                try
                 {
-                    Debug.Log($"[BetterContinents] Couldn't find loaded settings for world {world.m_name}, mod is disabled for this World");
-                    Settings = BetterContinentsSettings.Disabled(world.m_uid);
-                    AllSettings.Add(world.m_uid, Settings);
+                    File.Delete(World.GetMetaPath(name) + ".BetterContinents");
+                    Debug.Log($"[BetterContinents] Deleted saved settings for {name}");
                 }
-                Settings.Dump();
+                catch
+                {
+                    // ignored
+                }
             }
         }
         
-        // Register our RPC for receiving settings on clients
-        [HarmonyPatch(typeof(ZNet), "OnNewConnection")]
-        private class ZNetOnNewConnectionPatch
+        [HarmonyPatch(typeof(ZNet))]
+        private class ZNetPatch
         {
-            private static void Prefix(ZNetPeer peer)
+            // When the world is set on the server (applies to single player as well), we should select the correct loaded settings
+            [HarmonyPrefix, HarmonyPatch("SetServer")]
+            private static void SetServerPrefix(bool server, World world)
             {
-                Debug.Log($"[BetterContinents] Registering BetterContinentsConfig RPC");
+                if (server)
+                {
+                    Debug.Log($"[BetterContinents] Selected world {world.m_name}, applying settings");
+                    if (!AllSettings.TryGetValue(world.m_uid, out Settings))
+                    {
+                        Debug.Log(
+                            $"[BetterContinents] Couldn't find loaded settings for world {world.m_name}, mod is disabled for this World");
+                        AllSettings[world.m_uid] = Settings = BetterContinentsSettings.Disabled(world.m_uid);
+                    }
+
+                    Settings.Dump();
+                }
+                else
+                {
+                    // Disable the mod so we don't end up breaking if the server doesn't use it
+                    Debug.Log($"[BetterContinents] Joining a server, so disabling local settings");
+                    Settings = BetterContinentsSettings.Disabled();
+                }
+            }
+            
+            // Register our RPC for receiving settings on clients
+            [HarmonyPrefix, HarmonyPatch("OnNewConnection")]
+            private static void OnNewConnectionPrefix(ZNetPeer peer)
+            {
+                Debug.Log($"[BetterContinents] Registering settings RPC");
                 peer.m_rpc.Register<ZPackage>("BetterContinentsConfig", (ZRpc rpc, ZPackage pkg) =>
                 {
-                    Debug.Log($"[BetterContinents] Received BetterContinents Config from server");
-                    var newSettings = BetterContinentsSettings.Load(pkg); 
-                    AllSettings[newSettings.WorldUId] = newSettings;
-                    Settings = newSettings;
+                    Debug.Log($"[BetterContinents] Received settings from server");
+                    Settings = BetterContinentsSettings.Load(pkg); 
+                    AllSettings[Settings.WorldUId] = Settings;
                     Settings.Dump();
                 });
             }
-        }
-        
-        // Send our clients the settings for the currently loaded world. We do this before
-        // the body of the SendPeerInfo function, so as to ensure the data arrives before we might need it.
-        [HarmonyPatch(typeof(ZNet), "SendPeerInfo")]
-        private class ZNetSendPeerInfoPatch
-        {
-            private static void Prefix(ZNet __instance, ZRpc rpc)
+            
+            // Send our clients the settings for the currently loaded world. We do this before
+            // the body of the SendPeerInfo function, so as to ensure the data arrives before we might need it.
+            [HarmonyPrefix, HarmonyPatch("SendPeerInfo")]
+            private static void SendPeerInfoPrefix(ZNet __instance, ZRpc rpc)
             {
                 if (__instance.IsServer())
                 {
-                    Debug.Log($"[BetterContinents] Sending BetterContinents Config to clients");
+                    Debug.Log($"[BetterContinents] Sending settings to clients");
+                    Settings.Dump();
+                    
                     var zpackage = new ZPackage();
                     Settings.Serialize(zpackage);
                     rpc.Invoke("BetterContinentsConfig", zpackage);
@@ -279,10 +313,6 @@ namespace BetterContinents
             }
         }
         
-        private static float FeatureScaleCurve(float x) => ScaleRange(Gamma(x, 0.726965071031f), 0.2f, 3f);
-        private static float Gamma(float x, float h) => Mathf.Pow(x, Mathf.Pow(1 - h * 0.5f + 0.25f, 6f));
-        private static float ScaleRange(float g, float n, float m) => n + (m - n) * (1 - g); 
-
         // [HarmonyPatch(typeof(ZDOMan), "PrepareSave")]
         // private class ZDOManPrepareSavePatch
         // {
@@ -323,12 +353,13 @@ namespace BetterContinents
         //     }
         // }
 
-        [HarmonyPatch(typeof(WorldGenerator), "GetBaseHeight")]
+        [HarmonyPatch(typeof(WorldGenerator))]
         private class WorldGeneratorGetBaseHeightPatch
         {
-            // XY ranges -10180.57, -10187.99 ... 10136.63, 10162.5
-            [HarmonyPrefix]
-            private static bool Prefix(ref float wx, ref float wy, bool menuTerrain, ref float __result, float ___m_offset0, float ___m_offset1, float ___m_minMountainDistance)
+            // wx, wy are [-10500, 10500]
+            // __result should be [0, 1]
+            [HarmonyPrefix, HarmonyPatch("GetBaseHeight")]
+            private static bool GetBaseHeightPrefix(ref float wx, ref float wy, bool menuTerrain, ref float __result, float ___m_offset0, float ___m_offset1, float ___m_minMountainDistance)
             {
                 if (!Settings.EnabledForThisWorld)
                 {
@@ -409,8 +440,7 @@ namespace BetterContinents
                 __result = finalHeight;
                 return false;
             }
-            
-                    
+
             //[HarmonyPatch(typeof(WorldGenerator), "GetBiomeHeight")]
             //private class GetBiomeHeightPatch
             //{
