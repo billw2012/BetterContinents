@@ -3,6 +3,6 @@
     public static class ModInfo
     {
         public const string Name = "Better Continents";
-        public const string Version = "0.2.1.0";
+        public const string Version = "0.3.0.0";
     }
 }

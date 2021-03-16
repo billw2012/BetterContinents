@@ -1,6 +1,8 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
+using System.Security.Policy;
 using System.Threading;
 using BepInEx;
 using BepInEx.Configuration;
@@ -19,22 +21,253 @@ namespace BetterContinents
         private static ConfigEntry<float> ConfigHeightmapBlend;
         private static ConfigEntry<float> ConfigHeightmapAdd;
         
+        private static ConfigEntry<string> ConfigBiomemapFile;
+        
         private static ConfigEntry<float> ConfigContinentSize;
         private static ConfigEntry<float> ConfigMountainsAmount;
         private static ConfigEntry<float> ConfigSeaLevelAdjustment;
         private static ConfigEntry<bool> ConfigOceanChannelsEnabled;
+        private static ConfigEntry<bool> ConfigRiversEnabled;
+        // Perhaps lakes aren't a think? Hard to tell... Maybe they are biome specific
+        //private static ConfigEntry<bool> ConfigLakesEnabled;
         
         private static ConfigEntry<float> ConfigMaxRidgeHeight;
         private static ConfigEntry<float> ConfigRidgeSize;
         private static ConfigEntry<float> ConfigRidgeBlend;
         private static ConfigEntry<float> ConfigRidgeAmount;
+        
+        private static ConfigEntry<float> ConfigForestScale;
+        private static ConfigEntry<float> ConfigForestAmount;
 
+        private static ConfigEntry<bool> ConfigOverrideStartPosition;
+        private static ConfigEntry<float> ConfigStartPositionX;
+        private static ConfigEntry<float> ConfigStartPositionY;
+        
         private static void Log(string msg) => Debug.Log($"[BetterContinents] {msg}");
         private static void LogError(string msg) => Debug.LogError($"[BetterContinents] {msg}");
+
+        private abstract class ImageMapBase
+        {
+            public string FilePath;
+
+            public byte[] SourceData;
+
+            //public T[] Map;
+            public int Size;
+
+            public ImageMapBase(string filePath)
+            {
+                this.FilePath = filePath;
+            }
+
+            public ImageMapBase(string filePath, byte[] sourceData) : this(filePath)
+            {
+                this.SourceData = sourceData;
+            }
+
+            public bool LoadSourceImage()
+            {
+                // Already loaded?
+                if (SourceData != null)
+                    return true;
+
+                try
+                {
+                    SourceData = File.ReadAllBytes(FilePath);
+                    return true;
+                }
+                catch (Exception ex)
+                {
+                    LogError($"Cannot load image {FilePath}: {ex.Message}");
+                    return false;
+                }
+            }
+
+            public bool CreateMap()
+            {
+                var tex = new Texture2D(2, 2);
+                try
+                {
+                    try
+                    {
+                        tex.LoadImage(SourceData);
+                    }
+                    catch (Exception ex)
+                    {
+                        LogError($"Cannot load texture {FilePath}: {ex.Message}");
+                        return false;
+                    }
+
+                    if (tex.width != tex.height)
+                    {
+                        LogError(
+                            $"Cannot use texture {FilePath}: its width ({tex.width}) does not match its height ({tex.height})");
+                        return false;
+                    }
+
+                    bool IsPowerOfTwo(int x) => (x & (x - 1)) == 0;
+                    if (!IsPowerOfTwo(tex.width))
+                    {
+                        LogError(
+                            $"Cannot use texture {FilePath}: it is not a power of two size (e.g. 256, 512, 1024, 2048)");
+                        return false;
+                    }
+
+                    if (tex.width > 4096)
+                    {
+                        LogError(
+                            $"Cannot use texture {FilePath}: it is too big ({tex.width}x{tex.height}), keep the size to less or equal to 4096x4096");
+                        return false;
+                    }
+                    
+                    Size = tex.width;
+
+                    return this.LoadTextureToMap(tex);
+                }
+                finally
+                {
+                    Destroy(tex);
+                }
+            }
+
+            protected abstract bool LoadTextureToMap(Texture2D tex);
+        }
+
+        private class ImageMapFloat : ImageMapBase
+        {
+            private float[] Map;
+
+            public ImageMapFloat(string filePath) : base(filePath) { }
+
+            public ImageMapFloat(string filePath, byte[] sourceData) : base(filePath, sourceData) { }
+
+            protected override bool LoadTextureToMap(Texture2D tex)
+            {
+                var pixels = tex.GetPixels();
+                Map = new float[pixels.Length];
+                for (int i = 0; i < pixels.Length; i++)
+                {
+                    Map[i] = pixels[i].r;
+                }
+                return true;
+            }
+
+            public float GetValue(float x, float y)
+            {
+                float xa = x * (this.Size - 1);
+                float ya = y * (this.Size - 1);
+
+                int xi = Mathf.FloorToInt(xa);
+                int yi = Mathf.FloorToInt(ya);
+
+                float xd = xa - xi;
+                float yd = ya - yi;
+
+                int x0 = Mathf.Clamp(xi, 0, this.Size - 1);
+                int x1 = Mathf.Clamp(xi + 1, 0, this.Size - 1);
+                int y0 = Mathf.Clamp(yi, 0, this.Size - 1);
+                int y1 = Mathf.Clamp(yi + 1, 0, this.Size - 1);
+
+                float p00 = this.Map[y0 * this.Size + x0];
+                float p10 = this.Map[y0 * this.Size + x1];
+                float p01 = this.Map[y1 * this.Size + x0];
+                float p11 = this.Map[y1 * this.Size + x1];
+
+                return Mathf.Lerp(
+                    Mathf.Lerp(p00, p10, xd),
+                    Mathf.Lerp(p01, p11, xd),
+                    yd
+                );
+            }
+        }
+        
+        private class ImageMapBiome : ImageMapBase
+        {
+            private Heightmap.Biome[] Map;
+
+            public ImageMapBiome(string filePath) : base(filePath) { }
+
+            public ImageMapBiome(string filePath, byte[] sourceData) : base(filePath, sourceData) { }
+
+            private struct ColorBiome
+            {
+                public Color32 color;
+                public Heightmap.Biome biome;
+
+
+                public ColorBiome(Color32 color, Heightmap.Biome biome)
+                {
+                    this.color = color;
+                    this.biome = biome;
+                }
+            }
+            
+            private static readonly ColorBiome[] BiomeColorMapping = new ColorBiome[]
+            {
+                /*
+                    Ocean #0000FF 
+                    Meadows #00FF00
+                    Black Forest #007F00
+                    Swamp #7F7F00
+                    Mountains #FFFFFF
+                    Plains #FFFF00
+                    Mistlands #7F7F7F
+                    Deep North #00FFFF
+                    Ash Lands #FF0000
+                */
+                new ColorBiome(new Color32(0, 0, 255, 255), Heightmap.Biome.Ocean),
+                new ColorBiome(new Color32(0, 255, 0, 255), Heightmap.Biome.Meadows),
+                new ColorBiome(new Color32(0, 127, 0, 255), Heightmap.Biome.BlackForest),
+                new ColorBiome(new Color32(127, 127, 0, 255), Heightmap.Biome.Swamp),
+                new ColorBiome(new Color32(255, 255, 255, 255), Heightmap.Biome.Mountain),
+                new ColorBiome(new Color32(255, 255, 0, 255), Heightmap.Biome.Plains),
+                new ColorBiome(new Color32(127, 127, 127, 255), Heightmap.Biome.Mistlands),
+                new ColorBiome(new Color32(0, 255, 255, 255), Heightmap.Biome.DeepNorth),
+                new ColorBiome(new Color32(255, 0, 0, 255), Heightmap.Biome.AshLands),
+            };
+
+            protected override bool LoadTextureToMap(Texture2D tex)
+            {
+                float ColorDistance(Color a, Color b) =>
+                    Vector3.Distance(new Vector3(a.r, a.g, a.b), new Vector3(b.r, b.g, b.b));
+
+                var pixels = tex.GetPixels();
+                Map = new Heightmap.Biome[pixels.Length]; 
+                for (int i = 0; i < pixels.Length; i++)
+                {
+                    Map[i] = BiomeColorMapping.OrderBy(d => ColorDistance(pixels[i], d.color)).First().biome;
+                }
+                return true;
+            }
+
+            public Heightmap.Biome GetValue(float x, float y)
+            {
+                float xa = x * (this.Size - 1);
+                float ya = y * (this.Size - 1);
+
+                int xi = Mathf.FloorToInt(xa);
+                int yi = Mathf.FloorToInt(ya);
+
+                float xd = xa - xi;
+                float yd = ya - yi;
+
+                // Get the rounded value for the diff, so we can choose which of the 4 corner value to return
+                int xo = Mathf.RoundToInt(xd); 
+                int yo = Mathf.RoundToInt(yd);
+
+                int xf = Mathf.Clamp(xi + xo, 0, this.Size - 1);
+                int yf = Mathf.Clamp(yi + yo, 0, this.Size - 1);
+                
+                return this.Map[yf * this.Size + xf];
+            }
+        }
         
         private struct BetterContinentsSettings
         {
-            public const int LatestVersion = 1;
+            // Add new properties at the end for versioning serialization
+            public const int LatestVersion = 2;
+            
+            // Version 1
             public int Version;
 
             public long WorldUId;
@@ -50,17 +283,39 @@ namespace BetterContinents
             public float RidgeBlendSigmoidB;
             public float RidgeBlendSigmoidXOffset;
 
-            public string HeightmapSourceFilename;
-            public byte[] HeightmapSource;
+            // public string HeightmapSourceFilename; Replaced by Heightmap.FilePath
+            // public byte[] HeightmapSource; Replaced by Heightmap.SourceData
             
             public float HeightmapAmount;
             public float HeightmapBlend;
             public float HeightmapAdd;
             
+            // Version 2
             public bool OceanChannelsEnabled;
+            public bool RiversEnabled;
 
-            private float[] Heightmap;
-            private int HeightmapSize;
+            public float ForestScale;
+            public float ForestAmountOffset;
+
+            public bool OverrideStartPosition;
+            public float StartPositionX;
+            public float StartPositionY;
+            
+            //public bool LakesEnabled;
+            // public string BiomemapSourceFilename; Replaced by Biomemap.FilePath
+            // public byte[] BiomemapSource; Replaced by Biomemap.SourceData
+
+            // Non-serialized
+            private ImageMapFloat Heightmap;
+            private ImageMapBiome Biomemap;
+            
+            //private float[] Heightmap;
+            //private int HeightmapSize;
+
+            //private float[] Biomemap;
+            //private int BiomemapSize;
+
+            public bool OverrideBiomes => this.Biomemap != null;
             
             public static BetterContinentsSettings Create(long worldUId)
             {
@@ -90,7 +345,7 @@ namespace BetterContinents
                 {
                     GlobalScale = FeatureScaleCurve(ConfigContinentSize.Value);
                     MountainsAmount = ConfigMountainsAmount.Value;
-                    SeaLevelAdjustment = Mathf.Lerp(-0.05f, 0.05f, ConfigSeaLevelAdjustment.Value);
+                    SeaLevelAdjustment = Mathf.Lerp(-0.25f, 0.25f, ConfigSeaLevelAdjustment.Value);
 
                     MaxRidgeHeight = ConfigMaxRidgeHeight.Value;
                     RidgeScale = FeatureScaleCurve(ConfigRidgeSize.Value);
@@ -99,102 +354,48 @@ namespace BetterContinents
 
                     if (!string.IsNullOrEmpty(ConfigHeightmapFile.Value))
                     {
-                        HeightmapSourceFilename = ConfigHeightmapFile.Value;
                         HeightmapAmount = ConfigHeightmapAmount.Value;
                         HeightmapBlend = ConfigHeightmapBlend.Value;
                         HeightmapAdd = ConfigHeightmapAdd.Value;
 
-                        if (!LoadHeightmapSourceImage() || !CreateHeightmap())
+                        Heightmap = new ImageMapFloat(ConfigHeightmapFile.Value);
+                        if (!Heightmap.LoadSourceImage() || !Heightmap.CreateMap())
                         {
-                            // Clear the source file name again as it won't work
-                            HeightmapSourceFilename = null;
+                            Heightmap = null;
                         }
                     }
                     else
                     {
-                        HeightmapSourceFilename = string.Empty;
                         Heightmap = null;
+                    }
+                    
+                    
+                    if (!string.IsNullOrEmpty(ConfigBiomemapFile.Value))
+                    {
+                        Biomemap = new ImageMapBiome(ConfigBiomemapFile.Value);
+                        if (!Biomemap.LoadSourceImage() || !Biomemap.CreateMap())
+                        {
+                            Biomemap = null;
+                        }
+                    }
+                    else
+                    {
+                        Biomemap = null;
                     }
 
                     OceanChannelsEnabled = ConfigOceanChannelsEnabled.Value;
+                    RiversEnabled = ConfigRiversEnabled.Value;
+
+                    ForestScale = FeatureScaleCurve(ConfigForestScale.Value);
+                    ForestAmountOffset = Mathf.Lerp(-1, 1, ConfigForestAmount.Value);
+
+                    OverrideStartPosition = ConfigOverrideStartPosition.Value;
+                    StartPositionX = ConfigStartPositionX.Value;
+                    StartPositionY = ConfigStartPositionY.Value;
+                    //LakesEnabled = ConfigLakesEnabled.Value;
                 }
             }
 
-            private bool LoadHeightmapSourceImage()
-            {
-                // Already loaded?
-                if (HeightmapSource != null)
-                    return true;
-
-                try
-                {
-                    HeightmapSource = File.ReadAllBytes(HeightmapSourceFilename);
-                    return true;
-                }
-                catch (Exception ex)
-                {
-                    LogError($"Cannot load texture {HeightmapSourceFilename}: {ex.Message}");
-                    return false;
-                }
-            }
-            
-            private bool CreateHeightmap()
-            {
-                // Already loaded?
-                if (Heightmap != null)
-                    return false;
-
-                var tex = new Texture2D(2, 2);
-                try
-                {
-                    try
-                    {
-                        tex.LoadImage(HeightmapSource);
-                    }
-                    catch (Exception ex)
-                    {
-                        LogError($"Cannot load texture {HeightmapSourceFilename}: {ex.Message}");
-                        return false;
-                    }
-
-                    if (tex.width != tex.height)
-                    {
-                        LogError($"Cannot use texture {HeightmapSourceFilename}: its width ({tex.width}) does not match its height ({tex.height})");
-                        return false;
-                    }
-
-                    bool IsPowerOfTwo(int x) => (x & (x - 1)) == 0;
-                    if (!IsPowerOfTwo(tex.width))
-                    {
-                        LogError($"Cannot use texture {HeightmapSourceFilename}: it is not a power of two size (e.g. 256, 512, 1024, 2048)");
-                        return false;
-                    }
-
-                    if (tex.width > 4096)
-                    {
-                        LogError($"Cannot use texture {HeightmapSourceFilename}: it is too big ({tex.width}x{tex.height}), keep the size to less or equal to 4096x4096");
-                        return false;
-                    }
-
-                    var pixels = tex.GetPixels();
-                    Heightmap = new float[pixels.Length];
-                    for (int i = 0; i < pixels.Length; i++)
-                    {
-                        Heightmap[i] = pixels[i].r;
-                    }
-
-                    HeightmapSize = (int) Mathf.Sqrt(Heightmap.Length);
-                    
-                    Log($"Loaded texture {HeightmapSourceFilename} as heightmap, {HeightmapSize}x{HeightmapSize}");
-                    
-                    return true;
-                }
-                finally
-                {
-                    Destroy(tex);
-                }
-            }
-            
             private static float FeatureScaleCurve(float x) => ScaleRange(Gamma(x, 0.726965071031f), 0.2f, 3f);
             private static float Gamma(float x, float h) => Mathf.Pow(x, Mathf.Pow(1 - h * 0.5f + 0.25f, 6f));
             private static float ScaleRange(float g, float n, float m) => n + (m - n) * (1 - g); 
@@ -204,30 +405,51 @@ namespace BetterContinents
                 Log($"Version {Version}");
                 Log($"WorldUId {WorldUId}");
                 
-                Log($"EnabledForThisWorld {EnabledForThisWorld}");
-
                 if (EnabledForThisWorld)
                 {
-                    if (!string.IsNullOrEmpty(HeightmapSourceFilename))
+                    if (Heightmap != null)
                     {
-                        Log($"Heightmap {HeightmapSourceFilename}");
-                        Log(
-                            $"Heightmap size {HeightmapSize}x{HeightmapSize}, amount {HeightmapAmount}, blend {HeightmapBlend}, add {HeightmapAdd}");
+                        Log($"Heightmap file {Heightmap.FilePath}");
+                        Log($"Heightmap size {Heightmap.Size}x{Heightmap.Size}, amount {HeightmapAmount}, blend {HeightmapBlend}, add {HeightmapAdd}");
                     }
                     else
                     {
                         Log($"Heightmap disabled");
                     }
 
+                    if (Biomemap != null)
+                    {
+                        Log($"Biomemap file {Biomemap.FilePath}");
+                        Log($"Biomemap size {Biomemap.Size}x{Biomemap.Size}");
+                    }
+                    else
+                    {
+                        Log($"Biomemap disabled");
+                    }
+
                     Log($"GlobalScale {GlobalScale}");
                     Log($"MountainsAmount {MountainsAmount}");
                     Log($"SeaLevelAdjustment {SeaLevelAdjustment}");
                     Log($"OceanChannelsEnabled {OceanChannelsEnabled}");
+                    Log($"RiversEnabled {RiversEnabled}");
+                    
+                    Log($"ForestScale {ForestScale}");
+                    Log($"ForestAmount {ForestAmountOffset}");
+                    //Log($"LakesEnabled {LakesEnabled}");
 
                     Log($"MaxRidgeHeight {MaxRidgeHeight}");
                     Log($"RidgeScale {RidgeScale}");
                     Log($"RidgeBlendSigmoidB {RidgeBlendSigmoidB}");
                     Log($"RidgeBlendSigmoidXOffset {RidgeBlendSigmoidXOffset}");
+
+                    if (OverrideStartPosition)
+                    {
+                        Log($"StartPosition {StartPositionX}, {StartPositionY}");
+                    }
+                }
+                else
+                {
+                    Log($"DISABLED");
                 }
             }
 
@@ -237,6 +459,7 @@ namespace BetterContinents
 
                 pkg.Write(WorldUId);
 
+                // Version 1
                 pkg.Write(EnabledForThisWorld);
 
                 if (EnabledForThisWorld)
@@ -250,16 +473,33 @@ namespace BetterContinents
                     pkg.Write(RidgeBlendSigmoidB);
                     pkg.Write(RidgeBlendSigmoidXOffset);
 
-                    pkg.Write(HeightmapSourceFilename ?? string.Empty);
-                    if (!string.IsNullOrEmpty(HeightmapSourceFilename))
+                    pkg.Write(Heightmap?.FilePath ?? string.Empty);
+                    if (Heightmap != null)
                     {
-                        pkg.Write(HeightmapSource);
+                        pkg.Write(Heightmap.SourceData);
                         pkg.Write(HeightmapAmount);
                         pkg.Write(HeightmapBlend);
                         pkg.Write(HeightmapAdd);
                     }
 
                     pkg.Write(OceanChannelsEnabled);
+
+                    // Version 2
+                    pkg.Write(RiversEnabled);
+                    //pkg.Write(LakesEnabled);
+                    
+                    pkg.Write(Biomemap?.FilePath ?? string.Empty);
+                    if (Biomemap != null)
+                    {
+                        pkg.Write(Biomemap.SourceData);
+                    }
+                    
+                    pkg.Write(ForestScale);
+                    pkg.Write(ForestAmountOffset);
+                    
+                    pkg.Write(OverrideStartPosition);
+                    pkg.Write(StartPositionX);
+                    pkg.Write(StartPositionY);
                 }
             }
 
@@ -294,13 +534,13 @@ namespace BetterContinents
                     RidgeBlendSigmoidB = pkg.ReadSingle();
                     RidgeBlendSigmoidXOffset = pkg.ReadSingle();
 
-                    HeightmapSourceFilename = pkg.ReadString();
-                    if (!string.IsNullOrEmpty(HeightmapSourceFilename))
+                    var heightmapFilePath = pkg.ReadString();
+                    if (!string.IsNullOrEmpty(heightmapFilePath))
                     {
-                        HeightmapSource = pkg.ReadByteArray();
-                        if (!CreateHeightmap())
+                        Heightmap = new ImageMapFloat(heightmapFilePath, pkg.ReadByteArray());
+                        if (!Heightmap.CreateMap())
                         {
-                            HeightmapSourceFilename = null;
+                            Heightmap = null;
                         }
                         HeightmapAmount = pkg.ReadSingle();
                         HeightmapBlend = pkg.ReadSingle();
@@ -308,6 +548,39 @@ namespace BetterContinents
                     }
 
                     OceanChannelsEnabled = pkg.ReadBool();
+
+                    if (Version >= 2)
+                    {
+                        RiversEnabled = pkg.ReadBool();
+                        //LakesEnabled = pkg.ReadBool();
+                        
+                        var biomemapFilePath = pkg.ReadString();
+                        if (!string.IsNullOrEmpty(biomemapFilePath))
+                        {
+                            Biomemap = new ImageMapBiome(biomemapFilePath, pkg.ReadByteArray());
+                            if (!Biomemap.CreateMap())
+                            {
+                                Biomemap = null;
+                            }
+                        }
+
+                        ForestScale = pkg.ReadSingle();
+                        ForestAmountOffset = pkg.ReadSingle();
+                        
+                        OverrideStartPosition = pkg.ReadBool();
+                        StartPositionX = pkg.ReadSingle();
+                        StartPositionY = pkg.ReadSingle();
+                    }
+                    else
+                    {
+                        RiversEnabled = true;
+                        ForestScale = 1;
+                        ForestAmountOffset = 0;
+                        OverrideStartPosition = false;
+                        StartPositionX = 0;
+                        StartPositionY = 0;
+                        //LakesEnabled = true;
+                    }
                 }
             }
 
@@ -318,40 +591,12 @@ namespace BetterContinents
                     return height;
                 }
 
-                float xa = x * (this.HeightmapSize - 1);
-                float ya = y * (this.HeightmapSize - 1);
-
-                int xi = Mathf.FloorToInt(xa);
-                int yi = Mathf.FloorToInt(ya);
-
-                float xd = xa - xi;
-                float yd = ya - yi;
-
-                int x0 = Mathf.Clamp(xi, 0, this.HeightmapSize - 1);
-                int x1 = Mathf.Clamp(xi + 1, 0, this.HeightmapSize - 1);
-                int y0 = Mathf.Clamp(yi, 0, this.HeightmapSize - 1);
-                int y1 = Mathf.Clamp(yi + 1, 0, this.HeightmapSize - 1);
-                float p00 = this.Heightmap[y0 * this.HeightmapSize + x0];
-                float p10 = this.Heightmap[y0 * this.HeightmapSize + x1];
-                float p01 = this.Heightmap[y1 * this.HeightmapSize + x0];
-                float p11 = this.Heightmap[y1 * this.HeightmapSize + x1];
-
-                float h = Mathf.Lerp(
-                    Mathf.Lerp(p00, p10, xd),
-                    Mathf.Lerp(p01, p11, xd),
-                    yd
-                );
+                float h = this.Heightmap.GetValue(x, y);
 
                 return Mathf.Lerp(height, h * HeightmapAmount, this.HeightmapBlend) + h * this.HeightmapAdd;
             }
 
-            // public void LoadHeightmapSlice(ZPackage pkg)
-            // {
-            //     int offset = pkg.ReadInt();
-            //     byte[] data = pkg.ReadByteArray();
-            //     Log($"Loading heightmap slice offset {offset}, size {data.Length}");
-            //     Buffer.BlockCopy(data, 0, Heightmap, offset, data.Length);
-            // }
+            public Heightmap.Biome GetBiomeOverride(WorldGenerator __instance, float mapX, float mapY) => this.Biomemap.GetValue(mapX, mapY); 
         }
         
         private static BetterContinentsSettings Settings;
@@ -360,13 +605,15 @@ namespace BetterContinents
         {
             ConfigEnabled = Config.Bind("BetterContinents.Global", "Enabled", true, "Whether this mod is enabled");
 
-            ConfigHeightmapFile = Config.Bind("BetterContinents.Heightmap", "HeightmapFile", "", "Path to a heightmap file to use. It should be a square, sized 128, 256, 512, 1024, 2048 or 4096 pixels. Supported formats: BMP, EXR, GIF, HDR, IFF, JPG, PICT, PNG, PSD, TGA, TIFF.");
+            ConfigHeightmapFile = Config.Bind("BetterContinents.Heightmap", "HeightmapFile", "", "Path to a heightmap file to use. See the description on Nexusmods.com for the specifications (it will fail if they are not met).");
             ConfigHeightmapAmount = Config.Bind("BetterContinents.Heightmap", "HeightmapAmount", 1f,
                 new ConfigDescription("Multiplier of the height value from the heightmap file", new AcceptableValueRange<float>(0, 1)));
             ConfigHeightmapBlend = Config.Bind("BetterContinents.Heightmap", "HeightmapBlend", 1f,
                 new ConfigDescription("How strongly to blend the heightmap file into the final result", new AcceptableValueRange<float>(0, 1)));
             ConfigHeightmapAdd = Config.Bind("BetterContinents.Heightmap", "HeightmapAdd", 0f,
                 new ConfigDescription("How strongly to add the heightmap file to the final result (usually you want to blend it instead)", new AcceptableValueRange<float>(-1, 1)));
+
+            ConfigBiomemapFile = Config.Bind("BetterContinents.Biomemap", "Biomemap", "", "Path to a biome map file to use. See the description on Nexusmods.com for the specifications (it will fail if they are not met).");
 
             ConfigContinentSize = Config.Bind("BetterContinents.Global", "ContinentSize", 0.5f,
                 new ConfigDescription("Continent Size", new AcceptableValueRange<float>(0, 1)));
@@ -375,6 +622,13 @@ namespace BetterContinents
             ConfigSeaLevelAdjustment = Config.Bind("BetterContinents.Global", "SeaLevelAdjustment", 0.5f,
                 new ConfigDescription("Modify sea level, which changes the land:sea ratio", new AcceptableValueRange<float>(0, 1)));
             ConfigOceanChannelsEnabled = Config.Bind("BetterContinents.Global", "OceanChannelsEnabled", true, "Whether ocean channels should be enabled or not (useful to disable when using height map for instance)");
+            ConfigRiversEnabled = Config.Bind("BetterContinents.Global", "RiversEnabled", true, "Whether rivers should be enabled or not");
+            
+            ConfigForestScale = Config.Bind("BetterContinents.Global", "ForestScale", 0.5f,
+                new ConfigDescription("Scales forested/cleared area size", new AcceptableValueRange<float>(0, 1)));
+            ConfigForestAmount = Config.Bind("BetterContinents.Global", "ForestAmount", 0.5f,
+                new ConfigDescription("Adjusts how much forest there is, relative to clearings", new AcceptableValueRange<float>(0, 1)));
+            //ConfigLakesEnabled = Config.Bind("BetterContinents.Global", "LakesEnabled", true, "Whether 'lakes' should be enabled or not");
 
             ConfigMaxRidgeHeight = Config.Bind("BetterContinents.Ridges", "MaxRidgeHeight", 0.5f,
                 new ConfigDescription("Max height of ridge features", new AcceptableValueRange<float>(0, 1)));
@@ -385,6 +639,12 @@ namespace BetterContinents
             ConfigRidgeAmount = Config.Bind("BetterContinents.Ridges", "RidgeAmount", 0.5f,
                 new ConfigDescription("How much ridges", new AcceptableValueRange<float>(0, 1)));
 
+            ConfigOverrideStartPosition = Config.Bind("BetterContinents.StartPosition", "OverrideStartPosition", false, "Whether to override the start position using the values provided (warning: will disable all validation of the position)");
+            ConfigStartPositionX = Config.Bind("BetterContinents.StartPosition", "StartPositionX", 0f,
+                new ConfigDescription("Start position override X value, in ranges -10500 to 10500", new AcceptableValueRange<float>(-10500, 10500)));
+            ConfigStartPositionY = Config.Bind("BetterContinents.StartPosition", "StartPositionY", 0f,
+                new ConfigDescription("Start position override Y value, in ranges -10500 to 10500", new AcceptableValueRange<float>(-10500, 10500)));
+            
             new Harmony("BetterContinents.Harmony").PatchAll();
             Log("Awake");
         }
@@ -605,37 +865,10 @@ namespace BetterContinents
         [HarmonyPatch(typeof(WorldGenerator))]
         private class WorldGeneratorPatch
         {
-            // // DOING:
-            // // - patch WorldGenerator.Initialize to load the settings or request them from server via RPC, combining it all into one place
-            // // - cache world settings locally by id, verify with hash
-            // [HarmonyPrefix, HarmonyPatch("Initialize")]
-            // private static void InitializePrefix(World world)
-            // {
-            //     Log($"Loading settings for {world.m_name}");
-            //
-            //     try
-            //     {
-            //         using (var binaryReader = new BinaryReader(File.OpenRead(world.GetMetaPath() + ".BetterContinents")))
-            //         {
-            //             int count = binaryReader.ReadInt32();
-            //             var newSettings = BetterContinentsSettings.Load(new ZPackage(binaryReader.ReadBytes(count)));
-            //             if (newSettings.WorldUId != world.m_uid)
-            //             {
-            //                 LogError($"ID in saved settings for {world.m_name} didn't match, mod is disabled for this World");
-            //             }
-            //             else
-            //             {
-            //                 AllSettings[newSettings.WorldUId] = Settings = newSettings;
-            //             }
-            //         }
-            //     }
-            //     catch
-            //     {
-            //         LogError($"Loading settings for {world.m_name} failed, mod is disabled for this World");
-            //         // We don't need to do anything, we disabled the mod already in SetServer
-            //         return;
-            //     }
-            // }
+            const float WorldSize = 10500f;
+            
+            // The base map x, y coordinates in 0..1 range
+            private static float GetMapCoord(float coord) => Mathf.Clamp01(coord / (2 * WorldSize) + 0.5f);
             
             // wx, wy are [-10500, 10500]
             // __result should be [0, 1]
@@ -660,18 +893,17 @@ namespace BetterContinents
                 }
                 float distance = Utils.Length(wx, wy);
                 
-                const float Size = 10500f;
                 // The base map x, y coordinates in 0..1 range
-                float mapX = Mathf.Clamp01(wx / (2 * Size) + 0.5f);
-                float mapY = Mathf.Clamp01(wy / (2 * Size) + 0.5f);
+                float mapX = GetMapCoord(wx);
+                float mapY = GetMapCoord(wy);
                 
                 wx *= Settings.GlobalScale;
                 wy *= Settings.GlobalScale;
 
                 float WarpScale = 0.001f * Settings.RidgeScale;
 
-                float warpX = (Mathf.PerlinNoise(wx * WarpScale, wy * WarpScale) - 0.5f) * Size;
-                float warpY = (Mathf.PerlinNoise(wx * WarpScale + 2f, wy * WarpScale + 3f) - 0.5f) * Size;
+                float warpX = (Mathf.PerlinNoise(wx * WarpScale, wy * WarpScale) - 0.5f) * WorldSize;
+                float warpY = (Mathf.PerlinNoise(wx * WarpScale + 2f, wy * WarpScale + 3f) - 0.5f) * WorldSize;
 
                 wx += 100000f + ___m_offset0;
                 wy += 100000f + ___m_offset1;
@@ -710,6 +942,7 @@ namespace BetterContinents
                         Utils.SmoothStep(744f, 1000f, distance);
                 }
 
+                // Edge of the world
                 if (distance > 10000f)
                 {
                     float t = Utils.LerpStep(10000f, 10500f, distance);
@@ -729,59 +962,90 @@ namespace BetterContinents
                 return false;
             }
 
-            // [HarmonyPrefix, HarmonyPatch("AddRivers")]
-            // private static bool AddRiversPrefix(ref float __result, float h)
-            // {
-            //     if (Settings.OceanChannelsEnabled)
-            //     {
-            //         // Fall through to normal function
-            //         return true;
-            //     }
-            //     else
-            //     {
-            //         __result = h;
-            //         return false;
-            //     }
-            // }
+            [HarmonyPrefix, HarmonyPatch("GetBiome", typeof(float), typeof(float))]
+            private static bool GetBiomePrefix(WorldGenerator __instance, float wx, float wy, ref Heightmap.Biome __result, World ___m_world)
+            {
+                if (!Settings.EnabledForThisWorld || ___m_world.m_menu || !Settings.OverrideBiomes)
+                {
+                    return true;
+                }
+                else
+                {
+                    // float baseHeight = (float)AccessTools.Method(typeof(WorldGenerator), "GetBaseHeight").Invoke(__instance, new object[] { wx, wy });
+                    // if (baseHeight <= 0.02)
+                    // {
+                    //     // We always return ocean based on height
+                    //     __result = global::Heightmap.Biome.Ocean;
+                    // }
+                    // else
+                    // {
+                        // The base map x, y coordinates in 0..1 range
+                        float mapX = GetMapCoord(wx);
+                        float mapY = GetMapCoord(wy);
+                        __result = Settings.GetBiomeOverride(__instance, mapX, mapY);
+                    //}
+                    return false;
+                }
+            }
+            
+            [HarmonyPrefix, HarmonyPatch("AddRivers")]
+            private static bool AddRiversPrefix(ref float __result, float h)
+            {
+                if (!Settings.EnabledForThisWorld || Settings.RiversEnabled)
+                {
+                    // Fall through to normal function
+                    return true;
+                }
+                else
+                {
+                    __result = h;
+                    return false;
+                }
+            }
 
-            //[HarmonyPatch(typeof(WorldGenerator), "GetBiomeHeight")]
-            //private class GetBiomeHeightPatch
-            //{
-            //    [HarmonyPrefix]
-            //    private static void Prefix(ref float wx, ref float wy)
-            //    {
-            //        wx *= 0.25f;
-            //        wy *= 0.25f;
-            //    }
-            //}
+            [HarmonyPrefix, HarmonyPatch("GetForestFactor")]
+            private static void GetForestFactorPrefix(ref Vector3 pos)
+            {
+                if (Settings.EnabledForThisWorld && Settings.ForestScale != 1)
+                {
+                    pos *= Settings.ForestScale;
+                }
+            }
+            
+            [HarmonyPostfix, HarmonyPatch("GetForestFactor")]
+            private static void GetForestFactorPostfix(ref float __result)
+            {
+                if (Settings.EnabledForThisWorld && Settings.ForestAmountOffset != 0)
+                {
+                    __result += Settings.ForestAmountOffset;
+                }
+            }
+        }
 
-            //[HarmonyPatch(typeof(WorldGenerator), "GetBaseHeight")]
-            //private class GetBaseHeightPatch
-            //{
-            //    // XY ranges -10180.57, -10187.99 ... 10136.63, 10162.5
-            //    [HarmonyPrefix]
-            //    private static void Prefix(ref float wx, ref float wy)
-            //    {
-            //        //wx *= 0.5f;
-            //        //wy *= 0.5f;
-            //    }
-
-            //    //private static float Gamma(float x, float h) => Mathf.Pow(x, Mathf.Pow(1 - h * 0.5f + 0.25f, 6f));
-            //    //private static float Slope(float x, float h) => Mathf.Pow(x, Mathf.Pow(1 - h * 0.5f + 0.25f, 6f));
-
-            //    //private const float WaterThreshold = 0.05f;
-            //    //private const float MinHeight = -0.1333731f;
-            //    //private const float MaxHeight = 0.8320156f;
-            //    //// Height ranges -0.1333731 ... 0.8320156
-            //    //[HarmonyPostfix]
-            //    //private static void Postfix(ref float __result)
-            //    //{
-            //    //    if (__result > WaterThreshold)
-            //    //    {
-            //    //        __result = Mathf.Pow((__result - WaterThreshold) / MaxHeight, 2) * MaxHeight + WaterThreshold;
-            //    //    }
-            //    //}
-            //}
+        [HarmonyPatch(typeof(ZoneSystem))]
+        private class ZoneSystemPatch
+        {
+            [HarmonyPrefix, HarmonyPatch("GenerateLocations", typeof(ZoneSystem.ZoneLocation))]
+            private static bool GenerateLocationsPrefix(ZoneSystem __instance, ZoneSystem.ZoneLocation location)
+            {
+                if (Settings.EnabledForThisWorld && Settings.OverrideStartPosition && location.m_prefabName == "StartTemple")
+                {
+                    var position = new Vector3(
+                        Settings.StartPositionX, 
+                        Settings.StartPositionY,
+                        WorldGenerator.instance.GetHeight(Settings.StartPositionX, Settings.StartPositionY)
+                    );
+                    AccessTools.Method(typeof(ZoneSystem), "RegisterLocation")
+                        .Invoke(__instance, new object[] { location, position, false });
+                    Log($"Start position overriden: set to {position}");
+                    return false;
+                }
+                else
+                {
+                    return true;
+                }
+                // Log($"Loc {location.m_group}, {location.m_quantity}, {location.m_unique}, {location.m_prefabName}");
+            }
         }
     }
 }
