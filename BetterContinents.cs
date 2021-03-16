@@ -345,7 +345,7 @@ namespace BetterContinents
                 {
                     GlobalScale = FeatureScaleCurve(ConfigContinentSize.Value);
                     MountainsAmount = ConfigMountainsAmount.Value;
-                    SeaLevelAdjustment = Mathf.Lerp(-0.25f, 0.25f, ConfigSeaLevelAdjustment.Value);
+                    SeaLevelAdjustment = Mathf.Lerp(0.25f, -0.25f, ConfigSeaLevelAdjustment.Value);
 
                     MaxRidgeHeight = ConfigMaxRidgeHeight.Value;
                     RidgeScale = FeatureScaleCurve(ConfigRidgeSize.Value);
@@ -1032,8 +1032,8 @@ namespace BetterContinents
                 {
                     var position = new Vector3(
                         Settings.StartPositionX, 
-                        Settings.StartPositionY,
-                        WorldGenerator.instance.GetHeight(Settings.StartPositionX, Settings.StartPositionY)
+                        WorldGenerator.instance.GetHeight(Settings.StartPositionX, Settings.StartPositionY),
+                        Settings.StartPositionY
                     );
                     AccessTools.Method(typeof(ZoneSystem), "RegisterLocation")
                         .Invoke(__instance, new object[] { location, position, false });
