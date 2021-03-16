@@ -14,6 +14,7 @@ namespace BetterContinents
     [BepInPlugin("BetterContinents", ModInfo.Name, ModInfo.Version)]
     public class BetterContinents : BaseUnityPlugin
     {
+        // See the Awake function for the config descriptions
         private static ConfigEntry<bool> ConfigEnabled;
         
         private static ConfigEntry<string> ConfigHeightmapFile;
@@ -28,7 +29,7 @@ namespace BetterContinents
         private static ConfigEntry<float> ConfigSeaLevelAdjustment;
         private static ConfigEntry<bool> ConfigOceanChannelsEnabled;
         private static ConfigEntry<bool> ConfigRiversEnabled;
-        // Perhaps lakes aren't a think? Hard to tell... Maybe they are biome specific
+        // Perhaps lakes aren't a thing? Hard to tell... Maybe they are biome specific
         //private static ConfigEntry<bool> ConfigLakesEnabled;
         
         private static ConfigEntry<float> ConfigMaxRidgeHeight;
@@ -46,13 +47,15 @@ namespace BetterContinents
         private static void Log(string msg) => Debug.Log($"[BetterContinents] {msg}");
         private static void LogError(string msg) => Debug.LogError($"[BetterContinents] {msg}");
 
+        // Loads and stores source image file in original format.
+        // Derived types will define the final type of the image pixels (the "map"), and
+        // how to access them with bi-linear interpolation.
         private abstract class ImageMapBase
         {
             public string FilePath;
 
             public byte[] SourceData;
 
-            //public T[] Map;
             public int Size;
 
             public ImageMapBase(string filePath)
@@ -264,7 +267,7 @@ namespace BetterContinents
         
         private struct BetterContinentsSettings
         {
-            // Add new properties at the end for versioning serialization
+            // Add new properties at the end, and comment where new versions start
             public const int LatestVersion = 2;
             
             // Version 1
@@ -283,9 +286,6 @@ namespace BetterContinents
             public float RidgeBlendSigmoidB;
             public float RidgeBlendSigmoidXOffset;
 
-            // public string HeightmapSourceFilename; Replaced by Heightmap.FilePath
-            // public byte[] HeightmapSource; Replaced by Heightmap.SourceData
-            
             public float HeightmapAmount;
             public float HeightmapBlend;
             public float HeightmapAdd;
@@ -300,20 +300,10 @@ namespace BetterContinents
             public bool OverrideStartPosition;
             public float StartPositionX;
             public float StartPositionY;
-            
-            //public bool LakesEnabled;
-            // public string BiomemapSourceFilename; Replaced by Biomemap.FilePath
-            // public byte[] BiomemapSource; Replaced by Biomemap.SourceData
 
             // Non-serialized
             private ImageMapFloat Heightmap;
             private ImageMapBiome Biomemap;
-            
-            //private float[] Heightmap;
-            //private int HeightmapSize;
-
-            //private float[] Biomemap;
-            //private int BiomemapSize;
 
             public bool OverrideBiomes => this.Biomemap != null;
             
@@ -387,7 +377,7 @@ namespace BetterContinents
                     RiversEnabled = ConfigRiversEnabled.Value;
 
                     ForestScale = FeatureScaleCurve(ConfigForestScale.Value);
-                    ForestAmountOffset = Mathf.Lerp(-1, 1, ConfigForestAmount.Value);
+                    ForestAmountOffset = Mathf.Lerp(1, -1, ConfigForestAmount.Value);
 
                     OverrideStartPosition = ConfigOverrideStartPosition.Value;
                     StartPositionX = ConfigStartPositionX.Value;
@@ -971,19 +961,11 @@ namespace BetterContinents
                 }
                 else
                 {
-                    // float baseHeight = (float)AccessTools.Method(typeof(WorldGenerator), "GetBaseHeight").Invoke(__instance, new object[] { wx, wy });
-                    // if (baseHeight <= 0.02)
-                    // {
-                    //     // We always return ocean based on height
-                    //     __result = global::Heightmap.Biome.Ocean;
-                    // }
-                    // else
-                    // {
-                        // The base map x, y coordinates in 0..1 range
-                        float mapX = GetMapCoord(wx);
-                        float mapY = GetMapCoord(wy);
-                        __result = Settings.GetBiomeOverride(__instance, mapX, mapY);
-                    //}
+
+                    float mapX = GetMapCoord(wx);
+                    float mapY = GetMapCoord(wy);
+                    __result = Settings.GetBiomeOverride(__instance, mapX, mapY);
+
                     return false;
                 }
             }
