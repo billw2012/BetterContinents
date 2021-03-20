@@ -23,7 +23,9 @@ namespace BetterContinents
         private static ConfigEntry<float> ConfigHeightmapAdd;
         
         private static ConfigEntry<string> ConfigBiomemapFile;
-        
+
+        private static ConfigEntry<string> ConfigSpawnmapFile;
+
         private static ConfigEntry<float> ConfigContinentSize;
         private static ConfigEntry<float> ConfigMountainsAmount;
         private static ConfigEntry<float> ConfigSeaLevelAdjustment;
@@ -44,6 +46,14 @@ namespace BetterContinents
         private static ConfigEntry<float> ConfigStartPositionX;
         private static ConfigEntry<float> ConfigStartPositionY;
         
+        private static ConfigEntry<bool> ConfigDebugSkipDefaultLocationPlacement;
+        private static ConfigEntry<bool> ConfigDebugModeEnabled;
+        
+        private const float WorldSize = 10500f;
+        private static readonly Vector2 Half = Vector2.one * 0.5f;
+        private static Vector2 NormalizedToWorld(Vector2 p) => (p - Half) * WorldSize * 2f;
+        private static Vector2 WorldToNormalized(Vector2 p) => p / (WorldSize * 2f) + Half;
+
         private static void Log(string msg) => Debug.Log($"[BetterContinents] {msg}");
         private static void LogError(string msg) => Debug.LogError($"[BetterContinents] {msg}");
 
@@ -254,21 +264,322 @@ namespace BetterContinents
                 float xd = xa - xi;
                 float yd = ya - yi;
 
-                // Get the rounded value for the diff, so we can choose which of the 4 corner value to return
-                int xo = Mathf.RoundToInt(xd); 
-                int yo = Mathf.RoundToInt(yd);
+                // "Interpolate" the 4 corners (sum the weights of the biomes at the four corners)
+                Heightmap.Biome GetBiome(int _x, int _y) => this.Map[Mathf.Clamp(_y, 0, this.Size - 1) * this.Size + Mathf.Clamp(_x, 0, this.Size - 1)];
 
-                int xf = Mathf.Clamp(xi + xo, 0, this.Size - 1);
-                int yf = Mathf.Clamp(yi + yo, 0, this.Size - 1);
-                
-                return this.Map[yf * this.Size + xf];
+                var biomes = new Heightmap.Biome[4];
+                var biomeWeights = new float[4];
+                int numBiomes = 0;
+                int topBiomeIdx = 0;
+                void SampleBiomeWeighted(int xs, int ys, float weight)
+                {
+                    var biome = GetBiome(xs, ys);
+                    int i = 0;
+                    for (; i < numBiomes; ++i)
+                    {
+                        if (biomes[i] == biome)
+                        {
+                            if (biomeWeights[i] + weight > biomeWeights[topBiomeIdx])
+                                topBiomeIdx = i;
+                            biomeWeights[i] += weight;
+                            return;
+                        }
+                    }
+
+                    if (i == numBiomes)
+                    {
+                        if (biomeWeights[numBiomes] + weight > biomeWeights[topBiomeIdx])
+                            topBiomeIdx = numBiomes;
+                        biomes[numBiomes] = biome;
+                        biomeWeights[numBiomes++] = weight;
+                    }
+                }
+                SampleBiomeWeighted(xi + 0, yi + 0, (1 - xd) * (1 - yd));
+                SampleBiomeWeighted(xi + 1, yi + 0, xd * (1 - yd));
+                SampleBiomeWeighted(xi + 0, yi + 1, (1 - xd) * yd);
+                SampleBiomeWeighted(xi + 1, yi + 1, xd * yd);
+
+                return biomes[topBiomeIdx];
+                    
+                // // Get the rounded value for the diff, so we can choose which of the 4 corner value to return
+                // int xo = Mathf.RoundToInt(xd); 
+                // int yo = Mathf.RoundToInt(yd);
+                //
+                // int xf = Mathf.Clamp(xi + xo, 0, this.Size - 1);
+                // int yf = Mathf.Clamp(yi + yo, 0, this.Size - 1);
+                //
+                // return this.Map[yf * this.Size + xf];
             }
+        }
+        
+        private class ImageMapSpawn : ImageMapBase
+        {
+            public Dictionary<string, List<Vector2>> RemainingSpawnAreas;
+
+            public ImageMapSpawn(string filePath) : base(filePath) { }
+
+            public ImageMapSpawn(string filePath, ZPackage from) : base(filePath)
+            {
+                Deserialize(from);
+            }
+
+            public void Serialize(ZPackage to)
+            {
+                to.Write(RemainingSpawnAreas.Count);
+                foreach (var kv in RemainingSpawnAreas)
+                {
+                    to.Write(kv.Key);
+                    to.Write(kv.Value.Count);
+                    foreach (var v in kv.Value)
+                    {
+                        to.Write(v.x);
+                        to.Write(v.y);
+                    }
+                }
+            }
+
+            private void Deserialize(ZPackage from)
+            {
+                int count = from.ReadInt();
+                RemainingSpawnAreas = new Dictionary<string, List<Vector2>>();
+                for (int i = 0; i < count; i++)
+                {
+                    var spawn = from.ReadString();
+                    var positionsCount = from.ReadInt();
+                    var positions = new List<Vector2>();
+                    for (int k = 0; k < positionsCount; k++)
+                    {
+                        float x = from.ReadSingle();
+                        float y = from.ReadSingle();
+                        positions.Add(new Vector2(x, y));
+                    }
+                    RemainingSpawnAreas.Add(spawn, positions);
+                }
+            }
+            
+            private struct ColorSpawn
+            {
+                public Color32 color;
+                public string spawn;
+                
+                public ColorSpawn(Color32 color, string spawn)
+                {
+                    this.color = color;
+                    this.spawn = spawn;
+                }
+            }
+            
+            private static readonly ColorSpawn[] SpawnColorMapping = new ColorSpawn[]
+            {
+                new ColorSpawn(new Color32(0xFF, 0x00, 0x00, 0xFF), "StartTemple"),
+                new ColorSpawn(new Color32(0xFF, 0x99, 0x00, 0xFF), "Eikthyrnir"),
+                new ColorSpawn(new Color32(0x00, 0xFF, 0x00, 0xFF), "GDKing"),
+                new ColorSpawn(new Color32(0xFF, 0xFF, 0x00, 0xFF), "GoblinKing"),
+                new ColorSpawn(new Color32(0x00, 0xFF, 0xFF, 0xFF), "Bonemass"),
+                new ColorSpawn(new Color32(0x4A, 0x86, 0xE8, 0xFF), "Dragonqueen"),
+                new ColorSpawn(new Color32(0x00, 0x00, 0xFF, 0xFF), "Vendor_BlackForest"),
+                new ColorSpawn(new Color32(0xE6, 0xB8, 0xAF, 0xFF), "AbandonedLogCabin02"),
+                new ColorSpawn(new Color32(0xE6, 0xB8, 0xAF, 0xFF), "AbandonedLogCabin03"),
+                new ColorSpawn(new Color32(0xE6, 0xB8, 0xAF, 0xFF), "AbandonedLogCabin04"),
+                new ColorSpawn(new Color32(0xC9, 0xDA, 0xF8, 0xFF), "TrollCave02"),
+                new ColorSpawn(new Color32(0xFF, 0xF2, 0xCC, 0xFF), "Crypt2"),
+                new ColorSpawn(new Color32(0xFF, 0xF2, 0xCC, 0xFF), "Crypt3"),
+                new ColorSpawn(new Color32(0xFF, 0xF2, 0xCC, 0xFF), "Crypt4"),
+                new ColorSpawn(new Color32(0x45, 0x81, 0x8E, 0xFF), "SunkenCrypt4"),
+                new ColorSpawn(new Color32(0xFF, 0xE5, 0x99, 0xFF), "Dolmen03"),
+                new ColorSpawn(new Color32(0xFF, 0xE5, 0x99, 0xFF), "Dolmen01"),
+                new ColorSpawn(new Color32(0xFF, 0xE5, 0x99, 0xFF), "Dolmen02"),
+                new ColorSpawn(new Color32(0xDD, 0x7E, 0x6B, 0xFF), "Ruin3"),
+                new ColorSpawn(new Color32(0xCC, 0x41, 0x25, 0xFF), "StoneTower1"),
+                new ColorSpawn(new Color32(0xCC, 0x41, 0x25, 0xFF), "StoneTower3"),
+                new ColorSpawn(new Color32(0x6A, 0xA8, 0x4F, 0xFF), "MountainGrave01"),
+                new ColorSpawn(new Color32(0x7F, 0x60, 0x60, 0xFF), "Grave1"),
+                new ColorSpawn(new Color32(0xB6, 0xD7, 0xA8, 0xFF), "InfestedTree01"),
+                new ColorSpawn(new Color32(0x6D, 0x9E, 0xEB, 0xFF), "WoodHouse1"),
+                new ColorSpawn(new Color32(0x6D, 0x9E, 0xEB, 0xFF), "WoodHouse10"),
+                new ColorSpawn(new Color32(0x6D, 0x9E, 0xEB, 0xFF), "WoodHouse11"),
+                new ColorSpawn(new Color32(0x6D, 0x9E, 0xEB, 0xFF), "WoodHouse12"),
+                new ColorSpawn(new Color32(0x6D, 0x9E, 0xEB, 0xFF), "WoodHouse13"),
+                new ColorSpawn(new Color32(0x6D, 0x9E, 0xEB, 0xFF), "WoodHouse2"),
+                new ColorSpawn(new Color32(0x6D, 0x9E, 0xEB, 0xFF), "WoodHouse3"),
+                new ColorSpawn(new Color32(0x6D, 0x9E, 0xEB, 0xFF), "WoodHouse4"),
+                new ColorSpawn(new Color32(0x6D, 0x9E, 0xEB, 0xFF), "WoodHouse5"),
+                new ColorSpawn(new Color32(0x6D, 0x9E, 0xEB, 0xFF), "WoodHouse6"),
+                new ColorSpawn(new Color32(0x6D, 0x9E, 0xEB, 0xFF), "WoodHouse7"),
+                new ColorSpawn(new Color32(0x6D, 0x9E, 0xEB, 0xFF), "WoodHouse8"),
+                new ColorSpawn(new Color32(0x6D, 0x9E, 0xEB, 0xFF), "WoodHouse9"),
+                new ColorSpawn(new Color32(0x76, 0xA5, 0xAF, 0xFF), "StoneHouse3"),
+                new ColorSpawn(new Color32(0x76, 0xA5, 0xAF, 0xFF), "StoneHouse4"),
+                new ColorSpawn(new Color32(0x93, 0xC4, 0x7D, 0xFF), "Meteorite"),
+                new ColorSpawn(new Color32(0xA6, 0x1C, 0x00, 0xFF), "StoneTowerRuins04"),
+                new ColorSpawn(new Color32(0xA6, 0x1C, 0x00, 0xFF), "StoneTowerRuins05"),
+                new ColorSpawn(new Color32(0x13, 0x4F, 0x5C, 0xFF), "SwampRuin1"),
+                new ColorSpawn(new Color32(0x13, 0x4F, 0x5C, 0xFF), "SwampRuin2"),
+                new ColorSpawn(new Color32(0x27, 0x4E, 0x13, 0xFF), "Ruin1"),
+                new ColorSpawn(new Color32(0x27, 0x4E, 0x13, 0xFF), "Ruin2"),
+                new ColorSpawn(new Color32(0x85, 0x20, 0x0C, 0xFF), "DrakeLorestone"),
+                new ColorSpawn(new Color32(0x5B, 0x0F, 0x00, 0xFF), "Runestone_Boars"),
+                new ColorSpawn(new Color32(0x4F, 0xCC, 0xCC, 0xFF), "Runestone_Draugr"),
+                new ColorSpawn(new Color32(0xEA, 0x99, 0x99, 0xFF), "Runestone_Greydwarfs"),
+                new ColorSpawn(new Color32(0xE0, 0x66, 0x66, 0xFF), "Runestone_Meadows"),
+                new ColorSpawn(new Color32(0xCC, 0x00, 0x00, 0xFF), "Runestone_Mountains"),
+                new ColorSpawn(new Color32(0x99, 0x00, 0x00, 0xFF), "Runestone_Plains"),
+                new ColorSpawn(new Color32(0x66, 0x00, 0x00, 0xFF), "Runestone_Swamps"),
+                new ColorSpawn(new Color32(0xD0, 0xE0, 0xE3, 0xFF), "ShipSetting01"),
+                new ColorSpawn(new Color32(0xFC, 0xE5, 0xCD, 0xFF), "ShipWreck01"),
+                new ColorSpawn(new Color32(0xFC, 0xE5, 0xCD, 0xFF), "ShipWreck02"),
+                new ColorSpawn(new Color32(0xFC, 0xE5, 0xCD, 0xFF), "ShipWreck03"),
+                new ColorSpawn(new Color32(0xFC, 0xE5, 0xCD, 0xFF), "ShipWreck04"),
+                new ColorSpawn(new Color32(0xBF, 0x90, 0x00, 0xFF), "GoblinCamp2"),
+                new ColorSpawn(new Color32(0xFF, 0xD9, 0x66, 0xFF), "DrakeNest01"),
+                new ColorSpawn(new Color32(0xF1, 0xC2, 0x32, 0xFF), "FireHole"),
+                new ColorSpawn(new Color32(0xD9, 0xEA, 0xD3, 0xFF), "Greydwarf_camp1"),
+                new ColorSpawn(new Color32(0xA2, 0xC4, 0xC9, 0xFF), "StoneCircle"),
+                new ColorSpawn(new Color32(0xF9, 0xCB, 0x9C, 0xFF), "StoneHenge1"),
+                new ColorSpawn(new Color32(0xF9, 0xCB, 0x9C, 0xFF), "StoneHenge2"),
+                new ColorSpawn(new Color32(0xF9, 0xCB, 0x9C, 0xFF), "StoneHenge3"),
+                new ColorSpawn(new Color32(0xF9, 0xCB, 0x9C, 0xFF), "StoneHenge4"),
+                new ColorSpawn(new Color32(0xF9, 0xCB, 0x9C, 0xFF), "StoneHenge5"),
+                new ColorSpawn(new Color32(0xF9, 0xCB, 0x9C, 0xFF), "StoneHenge6"),
+                new ColorSpawn(new Color32(0xF6, 0xB2, 0x6B, 0xFF), "StoneTowerRuins03"),
+                new ColorSpawn(new Color32(0xF6, 0xB2, 0x6B, 0xFF), "StoneTowerRuins07"),
+                new ColorSpawn(new Color32(0xF6, 0xB2, 0x6B, 0xFF), "StoneTowerRuins08"),
+                new ColorSpawn(new Color32(0xF6, 0xB2, 0x6B, 0xFF), "StoneTowerRuins09"),
+                new ColorSpawn(new Color32(0xF6, 0xB2, 0x6B, 0xFF), "StoneTowerRuins10"),
+                new ColorSpawn(new Color32(0xE6, 0x91, 0x38, 0xFF), "SwampHut5"),
+                new ColorSpawn(new Color32(0xE6, 0x91, 0x38, 0xFF), "SwampHut1"),
+                new ColorSpawn(new Color32(0xE6, 0x91, 0x38, 0xFF), "SwampHut2"),
+                new ColorSpawn(new Color32(0xE6, 0x91, 0x38, 0xFF), "SwampHut3"),
+                new ColorSpawn(new Color32(0xE6, 0x91, 0x38, 0xFF), "SwampHut4"),
+                new ColorSpawn(new Color32(0xA4, 0xC2, 0xF4, 0xFF), "Waymarker01"),
+                new ColorSpawn(new Color32(0xA4, 0xC2, 0xF4, 0xFF), "Waymarker02"),
+                new ColorSpawn(new Color32(0x38, 0x76, 0x1D, 0xFF), "MountainWell1"),
+                new ColorSpawn(new Color32(0x0C, 0x34, 0x3D, 0xFF), "SwampWell1"),
+                new ColorSpawn(new Color32(0xB4, 0x5F, 0x06, 0xFF), "WoodFarm1"),
+                new ColorSpawn(new Color32(0x78, 0x3F, 0x04, 0xFF), "WoodVillage1"),
+            };
+
+            protected override bool LoadTextureToMap(Texture2D tex)
+            {
+                int Index(int x, int y) => y * Size + x;
+                
+                var pixels = tex.GetPixels();
+
+                void FloodFill(int x, int y, Action<int, int> fillfn)
+                {
+                    var sourceColor = pixels[Index(x, y)];
+                    bool CheckValidity(int xc, int yc) => xc >= 0 && xc < Size && yc >= 0 && yc < Size && pixels[Index(xc, yc)] == sourceColor;
+
+                    var q = new Queue<Vector2i> (Size * Size);
+                    q.Enqueue (new Vector2i (x, y));
+
+                    while (q.Count > 0) {
+                        var point = q.Dequeue ();
+                        var x1 = point.x;
+                        var y1 = point.y;
+                        if (q.Count > Size * Size) {
+                            throw new Exception ($"Flood fill on spawn location failed. Queue size: {q.Count}");
+                        }
+
+                        fillfn(x1, y1);
+                        
+                        pixels[Index(x1, y1)] = Color.black;
+
+                        if (CheckValidity (x1 + 1, y1))
+                            q.Enqueue (new Vector2i (x1 + 1, y1));
+
+                        if (CheckValidity (x1 - 1, y1))
+                            q.Enqueue (new Vector2i(x1 - 1, y1));
+
+                        if (CheckValidity (x1, y1 + 1))
+                            q.Enqueue (new Vector2i (x1, y1 + 1));
+
+                        if (CheckValidity (x1, y1 - 1))
+                            q.Enqueue (new Vector2i (x1, y1 - 1));
+                    }
+                }
+                
+                // Determine the spawn positions by color first
+                var colorSpawns = new Dictionary<Color, List<Vector2>>();
+                for (int y = 0; y < Size; y++)
+                {
+                    for (int x = 0; x < Size; ++x)
+                    {
+                        int i = y * Size + x;
+                        var color = pixels[i];
+                        if (color != Color.black)
+                        {
+                            var area = new List<Vector2>();
+
+                            // Do this AFTER determining the SpawnColorMapping, as it changes the color in pixels to black
+                            FloodFill(x, y, (fx, fy) => area.Add(new Vector2(fx / (float) Size, fy / (float) Size)));
+
+                            if (!colorSpawns.TryGetValue(color, out var areas))
+                            {
+                                areas = new List<Vector2>();
+                                colorSpawns.Add(color, areas);
+                            }
+
+                            // Just select the actual position from the area now, there is no point delaying this until later
+                            var position = area[UnityEngine.Random.Range(0, area.Count)];
+                            areas.Add(position);
+                            Log($"Found #{ColorUtility.ToHtmlStringRGB(color)} area of {area.Count} size at {x}, {Size - y}, selected position {position.x}, {position.y}");
+                        }
+                    }
+                }
+                
+                // Now we need to divvy up the color spawn areas between the associated spawn types 
+                RemainingSpawnAreas = new Dictionary<string, List<Vector2>>();
+                foreach (var colorPositions in colorSpawns)
+                {
+                    var spawns = SpawnColorMapping.Where(d => d.color == colorPositions.Key).ToList();
+                    if (spawns.Count > 0)
+                    {
+                        foreach (var position in colorPositions.Value)
+                        {
+                            var spawn = spawns[UnityEngine.Random.Range(0, spawns.Count)].spawn;
+                            if (!RemainingSpawnAreas.TryGetValue(spawn, out var positions))
+                            {
+                                positions = new List<Vector2>();
+                                RemainingSpawnAreas.Add(spawn, positions);
+                            }
+
+                            positions.Add(position);
+                            Log($"Selected {spawn} for spawn position {position.x}, {position.y}");
+                        }
+                    }
+                    else
+                    {
+                        Log($"No spawns are mapped to color #{ColorUtility.ToHtmlStringRGB(colorPositions.Key)} (which has {colorPositions.Value.Count} spawn positions defined)");
+                    }
+                }
+
+                return true;
+            }
+
+            public Vector2? FindSpawn(string spawn)
+            {
+                if (RemainingSpawnAreas.TryGetValue(spawn, out var positions))
+                {
+                    int idx = UnityEngine.Random.Range(0, positions.Count);
+                    var position = positions[idx];
+                    positions.RemoveAt(idx);
+                    if (positions.Count == 0)
+                    {
+                        RemainingSpawnAreas.Remove(spawn);
+                    }
+                    return position;
+                }
+                return null;
+            }
+
+            public IEnumerable<Vector2> GetAllSpawns(string spawn) => RemainingSpawnAreas.TryGetValue(spawn, out var positions) ? positions : Enumerable.Empty<Vector2>();
         }
         
         private struct BetterContinentsSettings
         {
             // Add new properties at the end, and comment where new versions start
-            public const int LatestVersion = 2;
+            public const int LatestVersion = 3;
             
             // Version 1
             public int Version;
@@ -301,11 +612,16 @@ namespace BetterContinents
             public float StartPositionX;
             public float StartPositionY;
 
+            // Version 3
+            // <none>
+
             // Non-serialized
             private ImageMapFloat Heightmap;
             private ImageMapBiome Biomemap;
+            private ImageMapSpawn Spawnmap;
 
             public bool OverrideBiomes => this.Biomemap != null;
+            public bool UseSpawnmap => this.Spawnmap != null;
             
             public static BetterContinentsSettings Create(long worldUId)
             {
@@ -383,6 +699,19 @@ namespace BetterContinents
                     StartPositionX = ConfigStartPositionX.Value;
                     StartPositionY = ConfigStartPositionY.Value;
                     //LakesEnabled = ConfigLakesEnabled.Value;
+                    
+                    if (!string.IsNullOrEmpty(ConfigSpawnmapFile.Value))
+                    {
+                        Spawnmap = new ImageMapSpawn(ConfigSpawnmapFile.Value);
+                        if (!Spawnmap.LoadSourceImage() || !Spawnmap.CreateMap())
+                        {
+                            Spawnmap = null;
+                        }
+                    }
+                    else
+                    {
+                        Spawnmap = null;
+                    }
                 }
             }
 
@@ -415,6 +744,16 @@ namespace BetterContinents
                     else
                     {
                         Log($"Biomemap disabled");
+                    }
+                    
+                    if (Spawnmap != null)
+                    {
+                        Log($"Spawnmap file {Spawnmap.FilePath}");
+                        Log($"Spawnmap includes spawns for {Spawnmap.RemainingSpawnAreas.Count} types");
+                    }
+                    else
+                    {
+                        Log($"Spawnmap disabled");
                     }
 
                     Log($"GlobalScale {GlobalScale}");
@@ -475,21 +814,34 @@ namespace BetterContinents
                     pkg.Write(OceanChannelsEnabled);
 
                     // Version 2
-                    pkg.Write(RiversEnabled);
-                    //pkg.Write(LakesEnabled);
-                    
-                    pkg.Write(Biomemap?.FilePath ?? string.Empty);
-                    if (Biomemap != null)
+                    if (Version >= 2)
                     {
-                        pkg.Write(Biomemap.SourceData);
+                        pkg.Write(RiversEnabled);
+                        //pkg.Write(LakesEnabled);
+
+                        pkg.Write(Biomemap?.FilePath ?? string.Empty);
+                        if (Biomemap != null)
+                        {
+                            pkg.Write(Biomemap.SourceData);
+                        }
+
+                        pkg.Write(ForestScale);
+                        pkg.Write(ForestAmountOffset);
+
+                        pkg.Write(OverrideStartPosition);
+                        pkg.Write(StartPositionX);
+                        pkg.Write(StartPositionY);
                     }
                     
-                    pkg.Write(ForestScale);
-                    pkg.Write(ForestAmountOffset);
-                    
-                    pkg.Write(OverrideStartPosition);
-                    pkg.Write(StartPositionX);
-                    pkg.Write(StartPositionY);
+                    // Version 3
+                    if (Version >= 3)
+                    {
+                        pkg.Write(Spawnmap?.FilePath ?? string.Empty);
+                        if (Spawnmap != null)
+                        {
+                            Spawnmap.Serialize(pkg);
+                        }
+                    }
                 }
             }
 
@@ -571,6 +923,16 @@ namespace BetterContinents
                         StartPositionY = 0;
                         //LakesEnabled = true;
                     }
+                    
+                    // Version 3
+                    if (Version >= 3)
+                    {
+                        var spawnmapFilePath = pkg.ReadString();
+                        if (!string.IsNullOrEmpty(spawnmapFilePath))
+                        {
+                            Spawnmap = new ImageMapSpawn(spawnmapFilePath, pkg);
+                        }
+                    }
                 }
             }
 
@@ -586,7 +948,10 @@ namespace BetterContinents
                 return Mathf.Lerp(height, h * HeightmapAmount, this.HeightmapBlend) + h * this.HeightmapAdd;
             }
 
-            public Heightmap.Biome GetBiomeOverride(WorldGenerator __instance, float mapX, float mapY) => this.Biomemap.GetValue(mapX, mapY); 
+            public Heightmap.Biome GetBiomeOverride(WorldGenerator __instance, float mapX, float mapY) => this.Biomemap.GetValue(mapX, mapY);
+
+            public Vector2? FindSpawn(string spawn) => this.Spawnmap.FindSpawn(spawn);
+            public IEnumerable<Vector2> GetAllSpawns(string spawn) => this.Spawnmap.GetAllSpawns(spawn);
         }
         
         private static BetterContinentsSettings Settings;
@@ -605,6 +970,8 @@ namespace BetterContinents
 
             ConfigBiomemapFile = Config.Bind("BetterContinents.Biomemap", "Biomemap", "", "Path to a biome map file to use. See the description on Nexusmods.com for the specifications (it will fail if they are not met).");
 
+            ConfigSpawnmapFile = Config.Bind("BetterContinents.Spawnmap", "Spawnmap", "", "Path to a spawn map file to use. See the description on Nexusmods.com for the specifications (it will fail if they are not met).");
+            
             ConfigContinentSize = Config.Bind("BetterContinents.Global", "ContinentSize", 0.5f,
                 new ConfigDescription("Continent Size", new AcceptableValueRange<float>(0, 1)));
             ConfigMountainsAmount = Config.Bind("BetterContinents.Global", "MountainsAmount", 0.5f,
@@ -635,6 +1002,10 @@ namespace BetterContinents
             ConfigStartPositionY = Config.Bind("BetterContinents.StartPosition", "StartPositionY", 0f,
                 new ConfigDescription("Start position override Y value, in ranges -10500 to 10500", new AcceptableValueRange<float>(-10500, 10500)));
             
+            ConfigDebugSkipDefaultLocationPlacement = Config.Bind("BetterContinents.Debug", "SkipDefaultLocationPlacement", false, "Skips default location placement during world gen (spawn temple and spawnmap are still placed), for quickly testing the heightmap itself.");
+            
+            ConfigDebugModeEnabled = Config.Bind("BetterContinents.Debug", "DebugMode", false, "Automatically reveals the full map on respawn, enables cheat mode, and debug mode, for debugging purposes.");
+
             new Harmony("BetterContinents.Harmony").PatchAll();
             Log("Awake");
         }
@@ -643,7 +1014,7 @@ namespace BetterContinents
         private class WorldPatch
         {
             // When the world metadata is saved we write an extra file next to it for our own config
-            [HarmonyPrefix, HarmonyPatch("SaveWorldMetaData")]
+            [HarmonyPrefix, HarmonyPatch(nameof(World.SaveWorldMetaData))]
             private static void SaveWorldMetaDataPrefix(World __instance)
             {
                 Log($"Saving settings for {__instance.m_name}");
@@ -688,7 +1059,7 @@ namespace BetterContinents
                 File.Move(newName, ourMetaPath);
             }
 
-            [HarmonyPostfix, HarmonyPatch("RemoveWorld")]
+            [HarmonyPostfix, HarmonyPatch(nameof(World.RemoveWorld))]
             private static void RemoveWorldPostfix(string name)
             {
                 try
@@ -707,7 +1078,7 @@ namespace BetterContinents
         private class ZNetPatch
         {
             // When the world is set on the server (applies to single player as well), we should select the correct loaded settings
-            [HarmonyPrefix, HarmonyPatch("SetServer")]
+            [HarmonyPrefix, HarmonyPatch(nameof(ZNet.SetServer))]
             private static void SetServerPrefix(bool server, World world)
             {
                 if (server)
@@ -855,8 +1226,6 @@ namespace BetterContinents
         [HarmonyPatch(typeof(WorldGenerator))]
         private class WorldGeneratorPatch
         {
-            const float WorldSize = 10500f;
-            
             // The base map x, y coordinates in 0..1 range
             private static float GetMapCoord(float coord) => Mathf.Clamp01(coord / (2 * WorldSize) + 0.5f);
             
@@ -872,15 +1241,20 @@ namespace BetterContinents
 
                 if (menuTerrain)
                 {
-                    wx += 100000f + ___m_offset0;
-                    wy += 100000f + ___m_offset1;
-                    float num = 0f;
-                    num += Mathf.PerlinNoise(wx * 0.002f * 0.5f, wy * 0.002f * 0.5f) * Mathf.PerlinNoise(wx * 0.003f * 0.5f, wy * 0.003f * 0.5f) * 1f;
-                    num += Mathf.PerlinNoise(wx * 0.002f * 1f, wy * 0.002f * 1f) * Mathf.PerlinNoise(wx * 0.003f * 1f, wy * 0.003f * 1f) * num * 0.9f;
-                    num += Mathf.PerlinNoise(wx * 0.005f * 1f, wy * 0.005f * 1f) * Mathf.PerlinNoise(wx * 0.01f * 1f, wy * 0.01f * 1f) * 0.5f * num;
-                    __result = num - 0.07f;
-                    return false;
+                    return true;
                 }
+
+                switch (Settings.Version)
+                {
+                    case 1 :
+                    case 2 : return GetBaseHeightV1(ref wx, ref wy, ref __result, ___m_offset0, ___m_offset1, ___m_minMountainDistance);
+                    case 3 :
+                    default: return GetBaseHeightV2(ref wx, ref wy, ref __result, ___m_offset0, ___m_offset1, ___m_minMountainDistance);
+                }
+            }
+            
+            private static bool GetBaseHeightV1(ref float wx, ref float wy, ref float __result, float ___m_offset0, float ___m_offset1, float ___m_minMountainDistance)
+            {
                 float distance = Utils.Length(wx, wy);
                 
                 // The base map x, y coordinates in 0..1 range
@@ -951,8 +1325,82 @@ namespace BetterContinents
                 __result = finalHeight;
                 return false;
             }
+            
+            private static bool GetBaseHeightV2(ref float wx, ref float wy, ref float __result, float ___m_offset0, float ___m_offset1, float ___m_minMountainDistance)
+            {
+                float distance = Utils.Length(wx, wy);
+                
+                // The base map x, y coordinates in 0..1 range
+                float mapX = GetMapCoord(wx);
+                float mapY = GetMapCoord(wy);
+                
+                wx *= Settings.GlobalScale;
+                wy *= Settings.GlobalScale;
 
-            [HarmonyPrefix, HarmonyPatch("GetBiome", typeof(float), typeof(float))]
+                float WarpScale = 0.001f * Settings.RidgeScale;
+
+                float warpX = (Mathf.PerlinNoise(wx * WarpScale, wy * WarpScale) - 0.5f) * WorldSize;
+                float warpY = (Mathf.PerlinNoise(wx * WarpScale + 2f, wy * WarpScale + 3f) - 0.5f) * WorldSize;
+
+                wx += 100000f + ___m_offset0;
+                wy += 100000f + ___m_offset1;
+
+                float bigFeatureNoiseHeight = Mathf.PerlinNoise(wx * 0.002f * 0.5f, wy * 0.002f * 0.5f) * Mathf.PerlinNoise(wx * 0.003f * 0.5f, wy * 0.003f * 0.5f) * 1f;
+                float bigFeatureHeight = Settings.ApplyHeightmap(mapX, mapY, bigFeatureNoiseHeight);
+                float ridgeHeight = (Mathf.PerlinNoise(warpX * 0.002f * 0.5f, warpY * 0.002f * 0.5f) * Mathf.PerlinNoise(warpX * 0.003f * 0.5f, warpY * 0.003f * 0.5f)) * Settings.MaxRidgeHeight;
+
+                // https://www.desmos.com/calculator/uq8wmu6dy7
+                float SigmoidActivation(float x, float a, float b) => 1 / (1 + Mathf.Exp(a + b * x));
+                float lerp = Mathf.Clamp(SigmoidActivation(Mathf.PerlinNoise(wx * 0.005f - 10000, wy * 0.005f - 5000) - Settings.RidgeBlendSigmoidXOffset, 0, Settings.RidgeBlendSigmoidB), 0, 1);
+                
+                float finalHeight = 0f;
+
+                float bigFeature = Mathf.Clamp(bigFeatureHeight + ridgeHeight * lerp, 0, 1);
+
+                const float SeaLevel = 0.05f;
+                float ApplyMountains(float x, float n) => x * (1 - Mathf.Pow(1 - x, 1.2f + n * 0.8f)) + x * (1 - x);
+
+                finalHeight += ApplyMountains(bigFeature - SeaLevel, Settings.MountainsAmount) + SeaLevel;
+
+                finalHeight += Mathf.PerlinNoise(wx * 0.002f * 1f, wy * 0.002f * 1f) * Mathf.PerlinNoise(wx * 0.003f * 1f, wy * 0.003f * 1f) * finalHeight * 0.9f;
+
+                finalHeight += Mathf.PerlinNoise(wx * 0.005f * 1f, wy * 0.005f * 1f) * Mathf.PerlinNoise(wx * 0.01f * 1f, wy * 0.01f * 1f) * 0.5f * finalHeight;
+
+                finalHeight -= 0.07f;
+
+                finalHeight += Settings.SeaLevelAdjustment;
+
+                if (Settings.OceanChannelsEnabled)
+                {
+                    float v = Mathf.Abs(
+                        Mathf.PerlinNoise(wx * 0.002f * 0.25f + 0.123f, wy * 0.002f * 0.25f + 0.15123f) -
+                        Mathf.PerlinNoise(wx * 0.002f * 0.25f + 0.321f, wy * 0.002f * 0.25f + 0.231f));
+                    finalHeight *= 1f - (1f - Utils.LerpStep(0.02f, 0.12f, v)) *
+                        Utils.SmoothStep(744f, 1000f, distance);
+                }
+
+                // Edge of the world
+                if (distance > 10000f)
+                {
+                    float t = Utils.LerpStep(10000f, 10500f, distance);
+                    finalHeight = Mathf.Lerp(finalHeight, -0.2f, t);
+                    if (distance > 10490f)
+                    {
+                        float t2 = Utils.LerpStep(10490f, 10500f, distance);
+                        finalHeight = Mathf.Lerp(finalHeight, -2f, t2);
+                    }
+                }
+                if (distance < ___m_minMountainDistance && finalHeight > 0.28f)
+                {
+                    float t3 = Mathf.Clamp01((finalHeight - 0.28f) / 0.099999994f);
+                    finalHeight = Mathf.Lerp(Mathf.Lerp(0.28f, 0.38f, t3), finalHeight, Utils.LerpStep(___m_minMountainDistance - 400f, ___m_minMountainDistance, distance));
+                }
+                __result = finalHeight;
+                return false;
+            }
+
+            // We must come before WorldGenOptions, as that mod always replaces the GetBiome function.
+            [HarmonyPrefix, HarmonyPatch(nameof(WorldGenerator.GetBiome), typeof(float), typeof(float)), HarmonyBefore("org.github.spacedrive.worldgen")]
             private static bool GetBiomePrefix(WorldGenerator __instance, float wx, float wy, ref Heightmap.Biome __result, World ___m_world)
             {
                 if (!Settings.EnabledForThisWorld || ___m_world.m_menu || !Settings.OverrideBiomes)
@@ -985,7 +1433,7 @@ namespace BetterContinents
                 }
             }
 
-            [HarmonyPrefix, HarmonyPatch("GetForestFactor")]
+            [HarmonyPrefix, HarmonyPatch(nameof(WorldGenerator.GetForestFactor))]
             private static void GetForestFactorPrefix(ref Vector3 pos)
             {
                 if (Settings.EnabledForThisWorld && Settings.ForestScale != 1)
@@ -994,7 +1442,7 @@ namespace BetterContinents
                 }
             }
             
-            [HarmonyPostfix, HarmonyPatch("GetForestFactor")]
+            [HarmonyPostfix, HarmonyPatch(nameof(WorldGenerator.GetForestFactor))]
             private static void GetForestFactorPostfix(ref float __result)
             {
                 if (Settings.EnabledForThisWorld && Settings.ForestAmountOffset != 0)
@@ -1007,26 +1455,71 @@ namespace BetterContinents
         [HarmonyPatch(typeof(ZoneSystem))]
         private class ZoneSystemPatch
         {
-            [HarmonyPrefix, HarmonyPatch("GenerateLocations", typeof(ZoneSystem.ZoneLocation))]
+            [HarmonyPrefix, HarmonyPatch(nameof(ZoneSystem.GenerateLocations), typeof(ZoneSystem.ZoneLocation))]
             private static bool GenerateLocationsPrefix(ZoneSystem __instance, ZoneSystem.ZoneLocation location)
             {
-                if (Settings.EnabledForThisWorld && Settings.OverrideStartPosition && location.m_prefabName == "StartTemple")
+                Log($"Generating location of group {location.m_group}, required {location.m_quantity}, unique {location.m_unique}, name {location.m_prefabName}");
+                if (Settings.EnabledForThisWorld)
                 {
-                    var position = new Vector3(
-                        Settings.StartPositionX, 
-                        WorldGenerator.instance.GetHeight(Settings.StartPositionX, Settings.StartPositionY),
-                        Settings.StartPositionY
-                    );
-                    AccessTools.Method(typeof(ZoneSystem), "RegisterLocation")
-                        .Invoke(__instance, new object[] { location, position, false });
-                    Log($"Start position overriden: set to {position}");
-                    return false;
+                    if (Settings.UseSpawnmap)
+                    {
+                        // Place all locations specified by the spawn map, ignoring counts specified in the prefab
+                        int placed = 0;
+                        foreach (var normalizedPosition in Settings.GetAllSpawns(location.m_prefabName))
+                        {
+                            var worldPos = NormalizedToWorld(normalizedPosition);
+                            var position = new Vector3(
+                                worldPos.x,
+                                WorldGenerator.instance.GetHeight(worldPos.x, worldPos.y),
+                                worldPos.y
+                            );
+                            AccessTools.Method(typeof(ZoneSystem), "RegisterLocation")
+                                .Invoke(__instance, new object[] {location, position, false});
+                            Log($"Position of {location.m_prefabName} ({++placed}/{location.m_quantity}) overriden: set to {position}");
+                        }
+
+                        // The vanilla placement algorithm considers already placed zones, but we can early out here anyway if we place them all
+                        // (this is required in the case of the StartTemple as we don't want to place it twice if OverrideStartPosition is specified) 
+                        if (placed >= location.m_quantity)
+                        {
+                            return false;
+                        }
+                    }
+                    
+                    if (Settings.OverrideStartPosition && location.m_prefabName == "StartTemple")
+                    {
+                        var position = new Vector3(
+                            Settings.StartPositionX,
+                            WorldGenerator.instance.GetHeight(Settings.StartPositionX, Settings.StartPositionY),
+                            Settings.StartPositionY
+                        );
+                        AccessTools.Method(typeof(ZoneSystem), "RegisterLocation")
+                            .Invoke(__instance, new object[] {location, position, false});
+                        Log($"Start position overriden: set to {position}");
+                        return false;
+                    }
+                    
+                    if (ConfigDebugSkipDefaultLocationPlacement.Value)
+                    {
+                        return false;
+                    }
                 }
-                else
+                return true;
+            }
+        }
+
+        [HarmonyPatch(typeof(Player))]
+        private class PlayerPatch
+        {
+            [HarmonyPostfix, HarmonyPatch(nameof(Player.OnSpawned))]
+            private static void OnSpawnedPostfix()
+            {
+                if (ZNet.instance && ZNet.instance.IsServer() && Settings.EnabledForThisWorld && ConfigDebugModeEnabled.Value)
                 {
-                    return true;
+                    AccessTools.Field(typeof(Console), "m_cheat").SetValue(Console.instance, true);
+                    Minimap.instance.ExploreAll();
+                    Player.m_debugMode = true;
                 }
-                // Log($"Loc {location.m_group}, {location.m_quantity}, {location.m_unique}, {location.m_prefabName}");
             }
         }
     }
