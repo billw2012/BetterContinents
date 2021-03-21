@@ -1399,8 +1399,10 @@ namespace BetterContinents
                 return false;
             }
 
-            // We must come before WorldGenOptions, as that mod always replaces the GetBiome function.
-            [HarmonyPrefix, HarmonyPatch(nameof(WorldGenerator.GetBiome), typeof(float), typeof(float)), HarmonyBefore("org.github.spacedrive.worldgen")]
+            // We must come after WorldGenOptions, as that mod always replaces the GetBiome function.
+            // Note in HarmonyX (which BepInEx uses), all prefixes always run, unless they opt out themselves.
+            // So coming BEFORE a prefex and returning false doesn't stop that prefix from running.
+            [HarmonyPrefix, HarmonyPatch(nameof(WorldGenerator.GetBiome), typeof(float), typeof(float)), HarmonyAfter("org.github.spacedrive.worldgen")]
             private static bool GetBiomePrefix(WorldGenerator __instance, float wx, float wy, ref Heightmap.Biome __result, World ___m_world)
             {
                 if (!Settings.EnabledForThisWorld || ___m_world.m_menu || !Settings.OverrideBiomes)
@@ -1409,7 +1411,6 @@ namespace BetterContinents
                 }
                 else
                 {
-
                     float mapX = GetMapCoord(wx);
                     float mapY = GetMapCoord(wy);
                     __result = Settings.GetBiomeOverride(__instance, mapX, mapY);
