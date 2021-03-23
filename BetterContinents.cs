@@ -1,13 +1,17 @@
-﻿using System;
+using System;
+using System.Collections;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Reflection;
 using System.Security.Policy;
 using System.Threading;
 using BepInEx;
 using BepInEx.Configuration;
 using HarmonyLib;
+using MonoMod.Utils;
 using UnityEngine;
+using UnityEngine.Assertions;
 
 namespace BetterContinents
 {
@@ -51,535 +55,26 @@ namespace BetterContinents
         
         private const float WorldSize = 10500f;
         private static readonly Vector2 Half = Vector2.one * 0.5f;
+        private static float NormalizedX(float x) => x / (WorldSize * 2f) + 0.5f;
+        private static float NormalizedY(float y) => y / (WorldSize * 2f) + 0.5f;
+        private static float WorldX(float x) => (x - 0.5f) * WorldSize * 2f;
+        private static float WorldY(float y) => (y - 0.5f) * WorldSize * 2f;
         private static Vector2 NormalizedToWorld(Vector2 p) => (p - Half) * WorldSize * 2f;
+        private static Vector2 NormalizedToWorld(float x, float y) => new Vector2(WorldX(x), WorldY(y));
         private static Vector2 WorldToNormalized(Vector2 p) => p / (WorldSize * 2f) + Half;
+        private static Vector2 WorldToNormalized(float x, float y) => new Vector2(NormalizedX(x), NormalizedY(y));
 
-        private static void Log(string msg) => Debug.Log($"[BetterContinents] {msg}");
-        private static void LogError(string msg) => Debug.LogError($"[BetterContinents] {msg}");
+        public static void Log(string msg) => Debug.Log($"[BetterContinents] {msg}");
+        public static void LogError(string msg) => Debug.LogError($"[BetterContinents] {msg}");
 
-        // Loads and stores source image file in original format.
-        // Derived types will define the final type of the image pixels (the "map"), and
-        // how to access them with bi-linear interpolation.
-        private abstract class ImageMapBase
-        {
-            public string FilePath;
-
-            public byte[] SourceData;
-
-            public int Size;
-
-            public ImageMapBase(string filePath)
-            {
-                this.FilePath = filePath;
-            }
-
-            public ImageMapBase(string filePath, byte[] sourceData) : this(filePath)
-            {
-                this.SourceData = sourceData;
-            }
-
-            public bool LoadSourceImage()
-            {
-                // Already loaded?
-                if (SourceData != null)
-                    return true;
-
-                try
-                {
-                    SourceData = File.ReadAllBytes(FilePath);
-                    return true;
-                }
-                catch (Exception ex)
-                {
-                    LogError($"Cannot load image {FilePath}: {ex.Message}");
-                    return false;
-                }
-            }
-
-            public bool CreateMap()
-            {
-                var tex = new Texture2D(2, 2);
-                try
-                {
-                    try
-                    {
-                        tex.LoadImage(SourceData);
-                    }
-                    catch (Exception ex)
-                    {
-                        LogError($"Cannot load texture {FilePath}: {ex.Message}");
-                        return false;
-                    }
-
-                    if (tex.width != tex.height)
-                    {
-                        LogError(
-                            $"Cannot use texture {FilePath}: its width ({tex.width}) does not match its height ({tex.height})");
-                        return false;
-                    }
-
-                    bool IsPowerOfTwo(int x) => (x & (x - 1)) == 0;
-                    if (!IsPowerOfTwo(tex.width))
-                    {
-                        LogError(
-                            $"Cannot use texture {FilePath}: it is not a power of two size (e.g. 256, 512, 1024, 2048)");
-                        return false;
-                    }
-
-                    if (tex.width > 4096)
-                    {
-                        LogError(
-                            $"Cannot use texture {FilePath}: it is too big ({tex.width}x{tex.height}), keep the size to less or equal to 4096x4096");
-                        return false;
-                    }
-                    
-                    Size = tex.width;
-
-                    return this.LoadTextureToMap(tex);
-                }
-                finally
-                {
-                    Destroy(tex);
-                }
-            }
-
-            protected abstract bool LoadTextureToMap(Texture2D tex);
-        }
-
-        private class ImageMapFloat : ImageMapBase
-        {
-            private float[] Map;
-
-            public ImageMapFloat(string filePath) : base(filePath) { }
-
-            public ImageMapFloat(string filePath, byte[] sourceData) : base(filePath, sourceData) { }
-
-            protected override bool LoadTextureToMap(Texture2D tex)
-            {
-                var pixels = tex.GetPixels();
-                Map = new float[pixels.Length];
-                for (int i = 0; i < pixels.Length; i++)
-                {
-                    Map[i] = pixels[i].r;
-                }
-                return true;
-            }
-
-            public float GetValue(float x, float y)
-            {
-                float xa = x * (this.Size - 1);
-                float ya = y * (this.Size - 1);
-
-                int xi = Mathf.FloorToInt(xa);
-                int yi = Mathf.FloorToInt(ya);
-
-                float xd = xa - xi;
-                float yd = ya - yi;
-
-                int x0 = Mathf.Clamp(xi, 0, this.Size - 1);
-                int x1 = Mathf.Clamp(xi + 1, 0, this.Size - 1);
-                int y0 = Mathf.Clamp(yi, 0, this.Size - 1);
-                int y1 = Mathf.Clamp(yi + 1, 0, this.Size - 1);
-
-                float p00 = this.Map[y0 * this.Size + x0];
-                float p10 = this.Map[y0 * this.Size + x1];
-                float p01 = this.Map[y1 * this.Size + x0];
-                float p11 = this.Map[y1 * this.Size + x1];
-
-                return Mathf.Lerp(
-                    Mathf.Lerp(p00, p10, xd),
-                    Mathf.Lerp(p01, p11, xd),
-                    yd
-                );
-            }
-        }
+        private static bool AllowDebugActions => ZNet.instance && ZNet.instance.IsServer() &&
+                                                 Settings.EnabledForThisWorld && ConfigDebugModeEnabled.Value;
         
-        private class ImageMapBiome : ImageMapBase
-        {
-            private Heightmap.Biome[] Map;
-
-            public ImageMapBiome(string filePath) : base(filePath) { }
-
-            public ImageMapBiome(string filePath, byte[] sourceData) : base(filePath, sourceData) { }
-
-            private struct ColorBiome
-            {
-                public Color32 color;
-                public Heightmap.Biome biome;
-
-
-                public ColorBiome(Color32 color, Heightmap.Biome biome)
-                {
-                    this.color = color;
-                    this.biome = biome;
-                }
-            }
-            
-            private static readonly ColorBiome[] BiomeColorMapping = new ColorBiome[]
-            {
-                /*
-                    Ocean #0000FF 
-                    Meadows #00FF00
-                    Black Forest #007F00
-                    Swamp #7F7F00
-                    Mountains #FFFFFF
-                    Plains #FFFF00
-                    Mistlands #7F7F7F
-                    Deep North #00FFFF
-                    Ash Lands #FF0000
-                */
-                new ColorBiome(new Color32(0, 0, 255, 255), Heightmap.Biome.Ocean),
-                new ColorBiome(new Color32(0, 255, 0, 255), Heightmap.Biome.Meadows),
-                new ColorBiome(new Color32(0, 127, 0, 255), Heightmap.Biome.BlackForest),
-                new ColorBiome(new Color32(127, 127, 0, 255), Heightmap.Biome.Swamp),
-                new ColorBiome(new Color32(255, 255, 255, 255), Heightmap.Biome.Mountain),
-                new ColorBiome(new Color32(255, 255, 0, 255), Heightmap.Biome.Plains),
-                new ColorBiome(new Color32(127, 127, 127, 255), Heightmap.Biome.Mistlands),
-                new ColorBiome(new Color32(0, 255, 255, 255), Heightmap.Biome.DeepNorth),
-                new ColorBiome(new Color32(255, 0, 0, 255), Heightmap.Biome.AshLands),
-            };
-
-            protected override bool LoadTextureToMap(Texture2D tex)
-            {
-                float ColorDistance(Color a, Color b) =>
-                    Vector3.Distance(new Vector3(a.r, a.g, a.b), new Vector3(b.r, b.g, b.b));
-
-                var pixels = tex.GetPixels();
-                Map = new Heightmap.Biome[pixels.Length]; 
-                for (int i = 0; i < pixels.Length; i++)
-                {
-                    Map[i] = BiomeColorMapping.OrderBy(d => ColorDistance(pixels[i], d.color)).First().biome;
-                }
-                return true;
-            }
-
-            public Heightmap.Biome GetValue(float x, float y)
-            {
-                float xa = x * (this.Size - 1);
-                float ya = y * (this.Size - 1);
-
-                int xi = Mathf.FloorToInt(xa);
-                int yi = Mathf.FloorToInt(ya);
-
-                float xd = xa - xi;
-                float yd = ya - yi;
-
-                // "Interpolate" the 4 corners (sum the weights of the biomes at the four corners)
-                Heightmap.Biome GetBiome(int _x, int _y) => this.Map[Mathf.Clamp(_y, 0, this.Size - 1) * this.Size + Mathf.Clamp(_x, 0, this.Size - 1)];
-
-                var biomes = new Heightmap.Biome[4];
-                var biomeWeights = new float[4];
-                int numBiomes = 0;
-                int topBiomeIdx = 0;
-                void SampleBiomeWeighted(int xs, int ys, float weight)
-                {
-                    var biome = GetBiome(xs, ys);
-                    int i = 0;
-                    for (; i < numBiomes; ++i)
-                    {
-                        if (biomes[i] == biome)
-                        {
-                            if (biomeWeights[i] + weight > biomeWeights[topBiomeIdx])
-                                topBiomeIdx = i;
-                            biomeWeights[i] += weight;
-                            return;
-                        }
-                    }
-
-                    if (i == numBiomes)
-                    {
-                        if (biomeWeights[numBiomes] + weight > biomeWeights[topBiomeIdx])
-                            topBiomeIdx = numBiomes;
-                        biomes[numBiomes] = biome;
-                        biomeWeights[numBiomes++] = weight;
-                    }
-                }
-                SampleBiomeWeighted(xi + 0, yi + 0, (1 - xd) * (1 - yd));
-                SampleBiomeWeighted(xi + 1, yi + 0, xd * (1 - yd));
-                SampleBiomeWeighted(xi + 0, yi + 1, (1 - xd) * yd);
-                SampleBiomeWeighted(xi + 1, yi + 1, xd * yd);
-
-                return biomes[topBiomeIdx];
-                    
-                // // Get the rounded value for the diff, so we can choose which of the 4 corner value to return
-                // int xo = Mathf.RoundToInt(xd); 
-                // int yo = Mathf.RoundToInt(yd);
-                //
-                // int xf = Mathf.Clamp(xi + xo, 0, this.Size - 1);
-                // int yf = Mathf.Clamp(yi + yo, 0, this.Size - 1);
-                //
-                // return this.Map[yf * this.Size + xf];
-            }
-        }
-        
-        private class ImageMapSpawn : ImageMapBase
-        {
-            public Dictionary<string, List<Vector2>> RemainingSpawnAreas;
-
-            public ImageMapSpawn(string filePath) : base(filePath) { }
-
-            public ImageMapSpawn(string filePath, ZPackage from) : base(filePath)
-            {
-                Deserialize(from);
-            }
-
-            public void Serialize(ZPackage to)
-            {
-                to.Write(RemainingSpawnAreas.Count);
-                foreach (var kv in RemainingSpawnAreas)
-                {
-                    to.Write(kv.Key);
-                    to.Write(kv.Value.Count);
-                    foreach (var v in kv.Value)
-                    {
-                        to.Write(v.x);
-                        to.Write(v.y);
-                    }
-                }
-            }
-
-            private void Deserialize(ZPackage from)
-            {
-                int count = from.ReadInt();
-                RemainingSpawnAreas = new Dictionary<string, List<Vector2>>();
-                for (int i = 0; i < count; i++)
-                {
-                    var spawn = from.ReadString();
-                    var positionsCount = from.ReadInt();
-                    var positions = new List<Vector2>();
-                    for (int k = 0; k < positionsCount; k++)
-                    {
-                        float x = from.ReadSingle();
-                        float y = from.ReadSingle();
-                        positions.Add(new Vector2(x, y));
-                    }
-                    RemainingSpawnAreas.Add(spawn, positions);
-                }
-            }
-            
-            private struct ColorSpawn
-            {
-                public Color32 color;
-                public string spawn;
-                
-                public ColorSpawn(Color32 color, string spawn)
-                {
-                    this.color = color;
-                    this.spawn = spawn;
-                }
-            }
-            
-            private static readonly ColorSpawn[] SpawnColorMapping = new ColorSpawn[]
-            {
-                new ColorSpawn(new Color32(0xFF, 0x00, 0x00, 0xFF), "StartTemple"),
-                new ColorSpawn(new Color32(0xFF, 0x99, 0x00, 0xFF), "Eikthyrnir"),
-                new ColorSpawn(new Color32(0x00, 0xFF, 0x00, 0xFF), "GDKing"),
-                new ColorSpawn(new Color32(0xFF, 0xFF, 0x00, 0xFF), "GoblinKing"),
-                new ColorSpawn(new Color32(0x00, 0xFF, 0xFF, 0xFF), "Bonemass"),
-                new ColorSpawn(new Color32(0x4A, 0x86, 0xE8, 0xFF), "Dragonqueen"),
-                new ColorSpawn(new Color32(0x00, 0x00, 0xFF, 0xFF), "Vendor_BlackForest"),
-                new ColorSpawn(new Color32(0xE6, 0xB8, 0xAF, 0xFF), "AbandonedLogCabin02"),
-                new ColorSpawn(new Color32(0xE6, 0xB8, 0xAF, 0xFF), "AbandonedLogCabin03"),
-                new ColorSpawn(new Color32(0xE6, 0xB8, 0xAF, 0xFF), "AbandonedLogCabin04"),
-                new ColorSpawn(new Color32(0xC9, 0xDA, 0xF8, 0xFF), "TrollCave02"),
-                new ColorSpawn(new Color32(0xFF, 0xF2, 0xCC, 0xFF), "Crypt2"),
-                new ColorSpawn(new Color32(0xFF, 0xF2, 0xCC, 0xFF), "Crypt3"),
-                new ColorSpawn(new Color32(0xFF, 0xF2, 0xCC, 0xFF), "Crypt4"),
-                new ColorSpawn(new Color32(0x45, 0x81, 0x8E, 0xFF), "SunkenCrypt4"),
-                new ColorSpawn(new Color32(0xFF, 0xE5, 0x99, 0xFF), "Dolmen03"),
-                new ColorSpawn(new Color32(0xFF, 0xE5, 0x99, 0xFF), "Dolmen01"),
-                new ColorSpawn(new Color32(0xFF, 0xE5, 0x99, 0xFF), "Dolmen02"),
-                new ColorSpawn(new Color32(0xDD, 0x7E, 0x6B, 0xFF), "Ruin3"),
-                new ColorSpawn(new Color32(0xCC, 0x41, 0x25, 0xFF), "StoneTower1"),
-                new ColorSpawn(new Color32(0xCC, 0x41, 0x25, 0xFF), "StoneTower3"),
-                new ColorSpawn(new Color32(0x6A, 0xA8, 0x4F, 0xFF), "MountainGrave01"),
-                new ColorSpawn(new Color32(0x7F, 0x60, 0x60, 0xFF), "Grave1"),
-                new ColorSpawn(new Color32(0xB6, 0xD7, 0xA8, 0xFF), "InfestedTree01"),
-                new ColorSpawn(new Color32(0x6D, 0x9E, 0xEB, 0xFF), "WoodHouse1"),
-                new ColorSpawn(new Color32(0x6D, 0x9E, 0xEB, 0xFF), "WoodHouse10"),
-                new ColorSpawn(new Color32(0x6D, 0x9E, 0xEB, 0xFF), "WoodHouse11"),
-                new ColorSpawn(new Color32(0x6D, 0x9E, 0xEB, 0xFF), "WoodHouse12"),
-                new ColorSpawn(new Color32(0x6D, 0x9E, 0xEB, 0xFF), "WoodHouse13"),
-                new ColorSpawn(new Color32(0x6D, 0x9E, 0xEB, 0xFF), "WoodHouse2"),
-                new ColorSpawn(new Color32(0x6D, 0x9E, 0xEB, 0xFF), "WoodHouse3"),
-                new ColorSpawn(new Color32(0x6D, 0x9E, 0xEB, 0xFF), "WoodHouse4"),
-                new ColorSpawn(new Color32(0x6D, 0x9E, 0xEB, 0xFF), "WoodHouse5"),
-                new ColorSpawn(new Color32(0x6D, 0x9E, 0xEB, 0xFF), "WoodHouse6"),
-                new ColorSpawn(new Color32(0x6D, 0x9E, 0xEB, 0xFF), "WoodHouse7"),
-                new ColorSpawn(new Color32(0x6D, 0x9E, 0xEB, 0xFF), "WoodHouse8"),
-                new ColorSpawn(new Color32(0x6D, 0x9E, 0xEB, 0xFF), "WoodHouse9"),
-                new ColorSpawn(new Color32(0x76, 0xA5, 0xAF, 0xFF), "StoneHouse3"),
-                new ColorSpawn(new Color32(0x76, 0xA5, 0xAF, 0xFF), "StoneHouse4"),
-                new ColorSpawn(new Color32(0x93, 0xC4, 0x7D, 0xFF), "Meteorite"),
-                new ColorSpawn(new Color32(0xA6, 0x1C, 0x00, 0xFF), "StoneTowerRuins04"),
-                new ColorSpawn(new Color32(0xA6, 0x1C, 0x00, 0xFF), "StoneTowerRuins05"),
-                new ColorSpawn(new Color32(0x13, 0x4F, 0x5C, 0xFF), "SwampRuin1"),
-                new ColorSpawn(new Color32(0x13, 0x4F, 0x5C, 0xFF), "SwampRuin2"),
-                new ColorSpawn(new Color32(0x27, 0x4E, 0x13, 0xFF), "Ruin1"),
-                new ColorSpawn(new Color32(0x27, 0x4E, 0x13, 0xFF), "Ruin2"),
-                new ColorSpawn(new Color32(0x85, 0x20, 0x0C, 0xFF), "DrakeLorestone"),
-                new ColorSpawn(new Color32(0x5B, 0x0F, 0x00, 0xFF), "Runestone_Boars"),
-                new ColorSpawn(new Color32(0x4F, 0xCC, 0xCC, 0xFF), "Runestone_Draugr"),
-                new ColorSpawn(new Color32(0xEA, 0x99, 0x99, 0xFF), "Runestone_Greydwarfs"),
-                new ColorSpawn(new Color32(0xE0, 0x66, 0x66, 0xFF), "Runestone_Meadows"),
-                new ColorSpawn(new Color32(0xCC, 0x00, 0x00, 0xFF), "Runestone_Mountains"),
-                new ColorSpawn(new Color32(0x99, 0x00, 0x00, 0xFF), "Runestone_Plains"),
-                new ColorSpawn(new Color32(0x66, 0x00, 0x00, 0xFF), "Runestone_Swamps"),
-                new ColorSpawn(new Color32(0xD0, 0xE0, 0xE3, 0xFF), "ShipSetting01"),
-                new ColorSpawn(new Color32(0xFC, 0xE5, 0xCD, 0xFF), "ShipWreck01"),
-                new ColorSpawn(new Color32(0xFC, 0xE5, 0xCD, 0xFF), "ShipWreck02"),
-                new ColorSpawn(new Color32(0xFC, 0xE5, 0xCD, 0xFF), "ShipWreck03"),
-                new ColorSpawn(new Color32(0xFC, 0xE5, 0xCD, 0xFF), "ShipWreck04"),
-                new ColorSpawn(new Color32(0xBF, 0x90, 0x00, 0xFF), "GoblinCamp2"),
-                new ColorSpawn(new Color32(0xFF, 0xD9, 0x66, 0xFF), "DrakeNest01"),
-                new ColorSpawn(new Color32(0xF1, 0xC2, 0x32, 0xFF), "FireHole"),
-                new ColorSpawn(new Color32(0xD9, 0xEA, 0xD3, 0xFF), "Greydwarf_camp1"),
-                new ColorSpawn(new Color32(0xA2, 0xC4, 0xC9, 0xFF), "StoneCircle"),
-                new ColorSpawn(new Color32(0xF9, 0xCB, 0x9C, 0xFF), "StoneHenge1"),
-                new ColorSpawn(new Color32(0xF9, 0xCB, 0x9C, 0xFF), "StoneHenge2"),
-                new ColorSpawn(new Color32(0xF9, 0xCB, 0x9C, 0xFF), "StoneHenge3"),
-                new ColorSpawn(new Color32(0xF9, 0xCB, 0x9C, 0xFF), "StoneHenge4"),
-                new ColorSpawn(new Color32(0xF9, 0xCB, 0x9C, 0xFF), "StoneHenge5"),
-                new ColorSpawn(new Color32(0xF9, 0xCB, 0x9C, 0xFF), "StoneHenge6"),
-                new ColorSpawn(new Color32(0xF6, 0xB2, 0x6B, 0xFF), "StoneTowerRuins03"),
-                new ColorSpawn(new Color32(0xF6, 0xB2, 0x6B, 0xFF), "StoneTowerRuins07"),
-                new ColorSpawn(new Color32(0xF6, 0xB2, 0x6B, 0xFF), "StoneTowerRuins08"),
-                new ColorSpawn(new Color32(0xF6, 0xB2, 0x6B, 0xFF), "StoneTowerRuins09"),
-                new ColorSpawn(new Color32(0xF6, 0xB2, 0x6B, 0xFF), "StoneTowerRuins10"),
-                new ColorSpawn(new Color32(0xE6, 0x91, 0x38, 0xFF), "SwampHut5"),
-                new ColorSpawn(new Color32(0xE6, 0x91, 0x38, 0xFF), "SwampHut1"),
-                new ColorSpawn(new Color32(0xE6, 0x91, 0x38, 0xFF), "SwampHut2"),
-                new ColorSpawn(new Color32(0xE6, 0x91, 0x38, 0xFF), "SwampHut3"),
-                new ColorSpawn(new Color32(0xE6, 0x91, 0x38, 0xFF), "SwampHut4"),
-                new ColorSpawn(new Color32(0xA4, 0xC2, 0xF4, 0xFF), "Waymarker01"),
-                new ColorSpawn(new Color32(0xA4, 0xC2, 0xF4, 0xFF), "Waymarker02"),
-                new ColorSpawn(new Color32(0x38, 0x76, 0x1D, 0xFF), "MountainWell1"),
-                new ColorSpawn(new Color32(0x0C, 0x34, 0x3D, 0xFF), "SwampWell1"),
-                new ColorSpawn(new Color32(0xB4, 0x5F, 0x06, 0xFF), "WoodFarm1"),
-                new ColorSpawn(new Color32(0x78, 0x3F, 0x04, 0xFF), "WoodVillage1"),
-            };
-
-            protected override bool LoadTextureToMap(Texture2D tex)
-            {
-                int Index(int x, int y) => y * Size + x;
-                
-                var pixels = tex.GetPixels();
-
-                void FloodFill(int x, int y, Action<int, int> fillfn)
-                {
-                    var sourceColor = pixels[Index(x, y)];
-                    bool CheckValidity(int xc, int yc) => xc >= 0 && xc < Size && yc >= 0 && yc < Size && pixels[Index(xc, yc)] == sourceColor;
-
-                    var q = new Queue<Vector2i> (Size * Size);
-                    q.Enqueue (new Vector2i (x, y));
-
-                    while (q.Count > 0) {
-                        var point = q.Dequeue ();
-                        var x1 = point.x;
-                        var y1 = point.y;
-                        if (q.Count > Size * Size) {
-                            throw new Exception ($"Flood fill on spawn location failed. Queue size: {q.Count}");
-                        }
-
-                        fillfn(x1, y1);
-                        
-                        pixels[Index(x1, y1)] = Color.black;
-
-                        if (CheckValidity (x1 + 1, y1))
-                            q.Enqueue (new Vector2i (x1 + 1, y1));
-
-                        if (CheckValidity (x1 - 1, y1))
-                            q.Enqueue (new Vector2i(x1 - 1, y1));
-
-                        if (CheckValidity (x1, y1 + 1))
-                            q.Enqueue (new Vector2i (x1, y1 + 1));
-
-                        if (CheckValidity (x1, y1 - 1))
-                            q.Enqueue (new Vector2i (x1, y1 - 1));
-                    }
-                }
-                
-                // Determine the spawn positions by color first
-                var colorSpawns = new Dictionary<Color, List<Vector2>>();
-                for (int y = 0; y < Size; y++)
-                {
-                    for (int x = 0; x < Size; ++x)
-                    {
-                        int i = y * Size + x;
-                        var color = pixels[i];
-                        if (color != Color.black)
-                        {
-                            var area = new List<Vector2>();
-
-                            // Do this AFTER determining the SpawnColorMapping, as it changes the color in pixels to black
-                            FloodFill(x, y, (fx, fy) => area.Add(new Vector2(fx / (float) Size, fy / (float) Size)));
-
-                            if (!colorSpawns.TryGetValue(color, out var areas))
-                            {
-                                areas = new List<Vector2>();
-                                colorSpawns.Add(color, areas);
-                            }
-
-                            // Just select the actual position from the area now, there is no point delaying this until later
-                            var position = area[UnityEngine.Random.Range(0, area.Count)];
-                            areas.Add(position);
-                            Log($"Found #{ColorUtility.ToHtmlStringRGB(color)} area of {area.Count} size at {x}, {Size - y}, selected position {position.x}, {position.y}");
-                        }
-                    }
-                }
-                
-                // Now we need to divvy up the color spawn areas between the associated spawn types 
-                RemainingSpawnAreas = new Dictionary<string, List<Vector2>>();
-                foreach (var colorPositions in colorSpawns)
-                {
-                    var spawns = SpawnColorMapping.Where(d => d.color == colorPositions.Key).ToList();
-                    if (spawns.Count > 0)
-                    {
-                        foreach (var position in colorPositions.Value)
-                        {
-                            var spawn = spawns[UnityEngine.Random.Range(0, spawns.Count)].spawn;
-                            if (!RemainingSpawnAreas.TryGetValue(spawn, out var positions))
-                            {
-                                positions = new List<Vector2>();
-                                RemainingSpawnAreas.Add(spawn, positions);
-                            }
-
-                            positions.Add(position);
-                            Log($"Selected {spawn} for spawn position {position.x}, {position.y}");
-                        }
-                    }
-                    else
-                    {
-                        Log($"No spawns are mapped to color #{ColorUtility.ToHtmlStringRGB(colorPositions.Key)} (which has {colorPositions.Value.Count} spawn positions defined)");
-                    }
-                }
-
-                return true;
-            }
-
-            public Vector2? FindSpawn(string spawn)
-            {
-                if (RemainingSpawnAreas.TryGetValue(spawn, out var positions))
-                {
-                    int idx = UnityEngine.Random.Range(0, positions.Count);
-                    var position = positions[idx];
-                    positions.RemoveAt(idx);
-                    if (positions.Count == 0)
-                    {
-                        RemainingSpawnAreas.Remove(spawn);
-                    }
-                    return position;
-                }
-                return null;
-            }
-
-            public IEnumerable<Vector2> GetAllSpawns(string spawn) => RemainingSpawnAreas.TryGetValue(spawn, out var positions) ? positions : Enumerable.Empty<Vector2>();
-        }
-        
+        // These are what are baked into the world when it is created
         private struct BetterContinentsSettings
         {
             // Add new properties at the end, and comment where new versions start
-            public const int LatestVersion = 3;
+            public const int LatestVersion = 4;
             
             // Version 1
             public int Version;
@@ -626,18 +121,18 @@ namespace BetterContinents
             public static BetterContinentsSettings Create(long worldUId)
             {
                 var settings = new BetterContinentsSettings();
-                settings.InitSettings(worldUId);
+                settings.InitSettings(worldUId, ConfigEnabled.Value);
                 return settings;
             }
             
             public static BetterContinentsSettings Disabled(long worldUId = -1)
             {
-                var settings = Create(worldUId);
-                settings.EnabledForThisWorld = false;
+                var settings = new BetterContinentsSettings();
+                settings.InitSettings(worldUId, false);
                 return settings;
             }
 
-            private void InitSettings(long worldUId)
+            private void InitSettings(long worldUId, bool enabled)
             {
                 Log($"Init settings for new world");
 
@@ -645,7 +140,7 @@ namespace BetterContinents
 
                 WorldUId = worldUId;
 
-                EnabledForThisWorld = ConfigEnabled.Value;
+                EnabledForThisWorld = enabled;
 
                 if (EnabledForThisWorld)
                 {
@@ -1010,6 +505,20 @@ namespace BetterContinents
             Log("Awake");
         }
 
+        // Enforce versioning
+        
+        [HarmonyPatch(typeof(Version))]
+        public static class VersionPatch
+        {
+            [HarmonyPostfix, HarmonyPatch("GetVersionString")]
+            private static void GetVersionStringPostfix(ref string __result)
+            {
+                __result += $"@{ModInfo.Version}";
+                Log($"Appended to version, resulting in {__result}");
+            }
+        }
+        
+        // Saving and removing of worlds
         [HarmonyPatch(typeof(World))]
         private class WorldPatch
         {
@@ -1074,6 +583,7 @@ namespace BetterContinents
             }
         }
 
+        // Dealing with settings, synchronization of them in multiplayer
         [HarmonyPatch(typeof(ZNet))]
         private class ZNetPatch
         {
@@ -1138,7 +648,7 @@ namespace BetterContinents
                     return hash;
                 }
             }
-
+            
             // Register our RPC for receiving settings on clients
             [HarmonyPrefix, HarmonyPatch("OnNewConnection")]
             private static void OnNewConnectionPrefix(ZNetPeer peer)
@@ -1193,33 +703,58 @@ namespace BetterContinents
             
             // Send our clients the settings for the currently loaded world. We do this before
             // the body of the SendPeerInfo function, so as to ensure the data arrives before we might need it.
-            [HarmonyPrefix, HarmonyPatch("SendPeerInfo")]
-            private static void SendPeerInfoPrefix(ZNet __instance, ZRpc rpc)
+            [HarmonyPrefix, HarmonyPatch("RPC_PeerInfo")]
+            private static bool RPC_PeerInfoPrefix(ZNet __instance, ZRpc rpc, ZPackage pkg)
             {
                 if (__instance.IsServer())
                 {
-                    Log($"Sending settings to clients");
-                    Settings.Dump();
-                    
-                    var settingsPackage = new ZPackage();
-                    Settings.Serialize(settingsPackage);
-
-                    var settingsData = settingsPackage.GetArray();
-                    Log($"Sending settings package header for {settingsData.Length} byte stream");
-                    rpc.Invoke("BetterContinentsConfigStart", settingsData.Length, GetHashCode(settingsData));
-
-                    for (int sentBytes = 0; sentBytes < settingsData.Length; )
-                    {
-                        int packetSize = Mathf.Min(settingsData.Length - sentBytes, 256 * 1024);
-                        var packet = ArraySlice(settingsData, sentBytes, packetSize);
-                        rpc.Invoke("BetterContinentsConfigPacket", sentBytes, GetHashCode(packet), new ZPackage(packet));
-                        // Make sure to flush or we will saturate the queue...
-                        rpc.GetSocket().Flush();
-                        sentBytes += packetSize;
-                        Log($"Sent {sentBytes} of {settingsData.Length} bytes");
-                        Thread.Sleep(2000);
-                    }
+                    __instance.StartCoroutine(SendSettings(__instance, rpc, pkg));
+                    return false;
                 }
+                else
+                {
+                    return true;
+                }
+            }
+
+            // private delegate void RPC_PeerInfoDelegate(ZNet instance, ZRpc rpc, ZPackage pkg);
+            // private static readonly RPC_PeerInfoDelegate RPC_PeerInfo = AccessTools.MethodDelegate<RPC_PeerInfoDelegate>(AccessTools.Method(typeof(ZNet), "RPC_PeerInfo"));
+            [HarmonyReversePatch]
+            [HarmonyPatch(typeof(ZNet), "RPC_PeerInfo")]
+            public static void RPC_PeerInfo(object instance, ZRpc rpc, ZPackage pkg)
+            {
+                // its a stub so it has no initial content
+                throw new NotImplementedException("It's a stub");
+            }
+            
+            private static IEnumerator SendSettings(ZNet instance, ZRpc rpc, ZPackage pkg)
+            {
+                Log($"Sending settings to new client");
+                Settings.Dump();
+                
+                var settingsPackage = new ZPackage();
+                Settings.Serialize(settingsPackage);
+
+                var settingsData = settingsPackage.GetArray();
+                Log($"Sending settings package header for {settingsData.Length} byte stream");
+                rpc.Invoke("BetterContinentsConfigStart", settingsData.Length, GetHashCode(settingsData));
+
+                const int SendChunkSize = 256 * 1024;
+
+                for (int sentBytes = 0; sentBytes < settingsData.Length; )
+                {
+                    int packetSize = Mathf.Min(settingsData.Length - sentBytes, SendChunkSize);
+                    var packet = ArraySlice(settingsData, sentBytes, packetSize);
+                    rpc.Invoke("BetterContinentsConfigPacket", sentBytes, GetHashCode(packet), new ZPackage(packet));
+                    // Make sure to flush or we will saturate the queue...
+                    rpc.GetSocket().Flush();
+                    sentBytes += packetSize;
+                    Log($"Sent {sentBytes} of {settingsData.Length} bytes");
+                    // Thread.Sleep(2000);
+                    yield return new WaitUntil(() => rpc.GetSocket().GetSendQueueSize() < SendChunkSize);
+                }
+
+                RPC_PeerInfo(instance, rpc, pkg);
             }
         }
 
@@ -1453,13 +988,17 @@ namespace BetterContinents
             }
         }
 
+        // Changes to location type spawn placement (this is the functional part of the mod)
         [HarmonyPatch(typeof(ZoneSystem))]
         private class ZoneSystemPatch
         {
+            private static readonly MethodInfo RegisterLocation = AccessTools.Method(typeof(ZoneSystem), "RegisterLocation");
+            
             [HarmonyPrefix, HarmonyPatch(nameof(ZoneSystem.GenerateLocations), typeof(ZoneSystem.ZoneLocation))]
             private static bool GenerateLocationsPrefix(ZoneSystem __instance, ZoneSystem.ZoneLocation location)
             {
-                Log($"Generating location of group {location.m_group}, required {location.m_quantity}, unique {location.m_unique}, name {location.m_prefabName}");
+                var groupName = string.IsNullOrEmpty(location.m_group) ? "<unnamed>" : location.m_group;
+                Log($"Generating location of group {groupName}, required {location.m_quantity}, unique {location.m_unique}, name {location.m_prefabName}");
                 if (Settings.EnabledForThisWorld)
                 {
                     if (Settings.UseSpawnmap)
@@ -1474,8 +1013,7 @@ namespace BetterContinents
                                 WorldGenerator.instance.GetHeight(worldPos.x, worldPos.y),
                                 worldPos.y
                             );
-                            AccessTools.Method(typeof(ZoneSystem), "RegisterLocation")
-                                .Invoke(__instance, new object[] {location, position, false});
+                            RegisterLocation.Invoke(__instance, new object[] {location, position, false});
                             Log($"Position of {location.m_prefabName} ({++placed}/{location.m_quantity}) overriden: set to {position}");
                         }
 
@@ -1494,8 +1032,7 @@ namespace BetterContinents
                             WorldGenerator.instance.GetHeight(Settings.StartPositionX, Settings.StartPositionY),
                             Settings.StartPositionY
                         );
-                        AccessTools.Method(typeof(ZoneSystem), "RegisterLocation")
-                            .Invoke(__instance, new object[] {location, position, false});
+                        RegisterLocation.Invoke(__instance, new object[] {location, position, false});
                         Log($"Start position overriden: set to {position}");
                         return false;
                     }
@@ -1509,17 +1046,161 @@ namespace BetterContinents
             }
         }
 
+        // Debug mode helpers
         [HarmonyPatch(typeof(Player))]
         private class PlayerPatch
         {
             [HarmonyPostfix, HarmonyPatch(nameof(Player.OnSpawned))]
             private static void OnSpawnedPostfix()
             {
-                if (ZNet.instance && ZNet.instance.IsServer() && Settings.EnabledForThisWorld && ConfigDebugModeEnabled.Value)
+                if (AllowDebugActions)
                 {
                     AccessTools.Field(typeof(Console), "m_cheat").SetValue(Console.instance, true);
                     Minimap.instance.ExploreAll();
                     Player.m_debugMode = true;
+                }
+            }
+        }
+        
+        // Debug mode helpers
+        [HarmonyPatch(typeof(Character))]
+        private class CharacterPatch
+        {
+            private static readonly MethodInfo TakeInput = AccessTools.Method(typeof(Character), "TakeInput");
+                
+            [HarmonyPrefix, HarmonyPatch("UpdateDebugFly")]
+            private static void UpdateDebugFlyPrefix(Character __instance, Vector3 ___m_moveDir, ref Vector3 ___m_currentVel)
+            {
+                if (AllowDebugActions)
+                {
+                    // Add some extra velocity
+                    Vector3 newVel = ___m_moveDir * 200f;
+                    
+                    if ((bool)TakeInput.Invoke(__instance, new object[] {}))
+                    {
+                        if (ZInput.GetButton("Jump"))
+                        {
+                            newVel.y = 200;
+                        }
+                        else if (Input.GetKey(KeyCode.LeftControl))
+                        {
+                            newVel.y = -200;
+                        }
+                    }
+                    ___m_currentVel = Vector3.Lerp(___m_currentVel, newVel, 0.5f);
+                }
+            }
+        }
+        
+        // Debug mode helpers
+        [HarmonyPatch(typeof(Minimap))]
+        private class MinimapPatch
+        {
+            [HarmonyPostfix, HarmonyPatch(nameof(Minimap.OnMapMiddleClick))]
+            private static void OnMapMiddleClickPostfix(Minimap __instance)
+            {
+                if (AllowDebugActions && Input.GetKey(KeyCode.LeftShift) && Input.GetKey(KeyCode.LeftControl))
+                {
+                    var player = Player.m_localPlayer;
+                    if (player)
+                    {
+                        var position = (Vector3)AccessTools.Method(typeof(Minimap), "ScreenToWorldPoint").Invoke(__instance, new object[] { Input.mousePosition });
+                        var pos = new Vector3(position.x, player.transform.position.y, position.z);
+                        player.TeleportTo(pos, player.transform.rotation, true);
+                    }
+                }
+            }
+        }
+        
+        // Debug mode helpers
+        [HarmonyPatch(typeof(Console))]
+        private class ConsolePatch
+        {
+            [HarmonyPrefix, HarmonyPatch("InputText")]
+            private static void InputTextPrefix(Console __instance)
+            {
+                if (AllowDebugActions)
+                {
+                    string text = __instance.m_input.text.Trim();
+                    if (text.StartsWith("help"))
+                    {
+                        __instance.Print("Better Continents: bc reload (hm/bm/sm) - reload a specific image from the source file, or all of them");
+                        __instance.Print("Better Continents: bc dumplocs - dump all location instance counts to the log/console");
+                        __instance.Print("Better Continents: bc reveallocs (filter) - add locations matching optional filter to the map");
+                        __instance.Print("Better Continents: bc hidelocs (filter) - add locations matching optional filter to the map");
+                    }
+
+                    Dictionary<Vector2i, ZoneSystem.LocationInstance> GetLocationInstances() =>
+                        (Dictionary<Vector2i, ZoneSystem.LocationInstance>)
+                        AccessTools.Field(typeof(ZoneSystem), "m_locationInstances").GetValue(ZoneSystem.instance);
+
+                    if (text.StartsWith("bc dumplocs"))
+                    {
+                        var locationInstances = GetLocationInstances();
+                        
+                        foreach (var lg in locationInstances.Values.GroupBy(l => l.m_location.m_prefabName))
+                        {
+                            Log($"Placed {lg.Count()} {lg.Key} locations");
+                        }
+                    }
+                    
+                    if (text == "bc reveallocs" || text.StartsWith("bc reveallocs "))
+                    {
+                        var typeFilters = text == "bc reveallocs" 
+                            ? null
+                            : text
+                                .Replace("bc reveallocs ", "")
+                                .Split(new []{' '}, StringSplitOptions.RemoveEmptyEntries)
+                                .Select(f => f.Trim())
+                                .ToList();
+                        
+                        var locationInstances = GetLocationInstances(); 
+                        foreach (var lg in locationInstances.Values.GroupBy(l => l.m_location.m_prefabName))
+                        {
+                            if(typeFilters == null || typeFilters.Any(f => lg.Key.ToLower().StartsWith(f)))
+                            {
+                                Log($"Marking {lg.Count()} {lg.Key} locations on map");
+                                int idx = 0;
+                                foreach (var li in lg)
+                                {
+                                    Minimap.instance.AddPin(li.m_position, Minimap.PinType.Icon3,
+                                        $"{li.m_location.m_prefabName} {idx++}", false, false);
+                                }
+                            }
+                        }
+                    }
+                    
+                    if (text ==  "bc hidelocs" || text.StartsWith("bc hidelocs "))
+                    {
+                        var typeFilters = text == "bc hidelocs" 
+                            ? null
+                            : text
+                                .Replace("bc hidelocs ", "")
+                                .Split(new []{' '}, StringSplitOptions.RemoveEmptyEntries)
+                                .Select(f => f.Trim())
+                                .ToList();
+
+                        var locationInstances = GetLocationInstances();
+
+                        var pins = (List<Minimap.PinData>)AccessTools.Field(typeof(Minimap), "m_pins").GetValue(Minimap.instance);
+                        foreach (var lg in locationInstances.Values.GroupBy(l => l.m_location.m_prefabName))
+                        {
+                            if(typeFilters == null || typeFilters.Any(f => lg.Key.ToLower().StartsWith(f)))
+                            {
+                                Log($"Hiding {lg.Count()} {lg.Key} locations from the map");
+                                int idx = 0;
+                                foreach (var li in lg)
+                                {
+                                    var name = $"{li.m_location.m_prefabName} {idx++}";
+                                    var pin = pins.FirstOrDefault(p => p.m_name == name && p.m_pos == li.m_position);
+                                    if (pin != null)
+                                    {
+                                        Minimap.instance.RemovePin(pins.FirstOrDefault());
+                                    }
+                                }
+                            }
+                        }
+                    }
                 }
             }
         }
