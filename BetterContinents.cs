@@ -12,6 +12,7 @@ using HarmonyLib;
 using MonoMod.Utils;
 using UnityEngine;
 using UnityEngine.Assertions;
+using UnityEngine.UI;
 
 namespace BetterContinents
 {
@@ -453,6 +454,10 @@ namespace BetterContinents
         
         private void Awake()
         {
+            // Cos why...
+            // Application.SetStackTraceLogType(LogType.Log, StackTraceLogType.None);
+            // Application.SetStackTraceLogType(LogType.Warning, StackTraceLogType.None);
+            
             ConfigEnabled = Config.Bind("BetterContinents.Global", "Enabled", true, "Whether this mod is enabled");
 
             ConfigHeightmapFile = Config.Bind("BetterContinents.Heightmap", "HeightmapFile", "", "Path to a heightmap file to use. See the description on Nexusmods.com for the specifications (it will fail if they are not met).");
@@ -503,19 +508,6 @@ namespace BetterContinents
 
             new Harmony("BetterContinents.Harmony").PatchAll();
             Log("Awake");
-        }
-
-        // Enforce versioning
-        
-        [HarmonyPatch(typeof(Version))]
-        public static class VersionPatch
-        {
-            [HarmonyPostfix, HarmonyPatch("GetVersionString")]
-            private static void GetVersionStringPostfix(ref string __result)
-            {
-                __result += $"@{ModInfo.Version}";
-                Log($"Appended to version, resulting in {__result}");
-            }
         }
         
         // Saving and removing of worlds
@@ -583,6 +575,8 @@ namespace BetterContinents
             }
         }
 
+        private static string LastConnectionError = null;
+        
         // Dealing with settings, synchronization of them in multiplayer
         [HarmonyPatch(typeof(ZNet))]
         private class ZNetPatch
@@ -648,12 +642,22 @@ namespace BetterContinents
                     return hash;
                 }
             }
-            
+
+            private static string ServerVersion;
+
             // Register our RPC for receiving settings on clients
             [HarmonyPrefix, HarmonyPatch("OnNewConnection")]
             private static void OnNewConnectionPrefix(ZNetPeer peer)
             {
                 Log($"Registering settings RPC");
+
+                ServerVersion = "<0.4.3";
+
+                peer.m_rpc.Register("BetterContinentsVersion", (ZRpc rpc, string serverVersion) =>
+                {
+                    ServerVersion = serverVersion;
+                    Log($"Receiving server version {serverVersion}");
+                });
 
                 peer.m_rpc.Register("BetterContinentsConfigStart", (ZRpc rpc, int totalBytes, int hash) =>
                 {
@@ -669,8 +673,13 @@ namespace BetterContinents
                     int hash = GetHashCode(packetData);
                     if (hash != packetHash)
                     {
+                        LastConnectionError = $"Better Continents settings from server were corrupted";
                         LogError($"Settings transfer failed: packet hash mismatch got {hash} expected {packetHash}");
+                        ZNet.m_connectionStatus = ZNet.ConnectionStatus.ErrorConnectFailed;
+                        ZNet.instance.Disconnect(peer);
+                        return;
                     }
+
                     Buffer.BlockCopy(packetData, 0, SettingsReceiveBuffer, offset, packetData.Length);
                     
                     SettingsReceiveBufferBytesReceived += packetData.Length;
@@ -685,10 +694,27 @@ namespace BetterContinents
 
                             Settings = BetterContinentsSettings.Load(new ZPackage(SettingsReceiveBuffer));
                             Settings.Dump();
+
+                            // We only care about server/client version match when the server sends a world that actually uses the mod
+                            if (Settings.EnabledForThisWorld && ServerVersion != ModInfo.Version)
+                            {
+                                LastConnectionError = $"Server world has Better Continents enabled, but server mod {ServerVersion} and client mod {ModInfo.Version} don't match";
+                                LogError(
+                                    $"Server sent world with Better Continents enabled, but server mod {ServerVersion} didn't match client mod {ModInfo.Version}");
+                                ZNet.m_connectionStatus = ZNet.ConnectionStatus.ErrorConnectFailed;
+                                ZNet.instance.Disconnect(peer);
+                            }
+                            else if (!Settings.EnabledForThisWorld)
+                            {
+                                Log($"Server world does not have Better Continents enabled, skipping version check");
+                            }
                         }
                         else
                         {
+                            LastConnectionError = $"Better Continents settings from server were corrupted";
                             LogError($"Settings transfer failed: hash mismatch got {finalHash} expected {SettingsReceiveHash}");
+                            ZNet.m_connectionStatus = ZNet.ConnectionStatus.ErrorConnectFailed;
+                            ZNet.instance.Disconnect(peer);
                         }
                     }
                 });
@@ -729,6 +755,9 @@ namespace BetterContinents
             
             private static IEnumerator SendSettings(ZNet instance, ZRpc rpc, ZPackage pkg)
             {
+                Log($"Sending version {ModInfo.Version} to new client");
+                rpc.Invoke("BetterContinentsVersion", ModInfo.Version);
+                
                 Log($"Sending settings to new client");
                 Settings.Dump();
                 
@@ -1122,19 +1151,20 @@ namespace BetterContinents
                 if (AllowDebugActions)
                 {
                     string text = __instance.m_input.text.Trim();
-                    if (text.StartsWith("help"))
+                    if (text.Trim() == "bc" || text.Trim() == "bc help")
                     {
-                        __instance.Print("Better Continents: bc reload (hm/bm/sm) - reload a specific image from the source file, or all of them");
-                        __instance.Print("Better Continents: bc dumplocs - dump all location instance counts to the log/console");
-                        __instance.Print("Better Continents: bc reveallocs (filter) - add locations matching optional filter to the map");
-                        __instance.Print("Better Continents: bc hidelocs (filter) - add locations matching optional filter to the map");
+                        // __instance.Print("Better Continents: bc reload (hm/bm/sm) - reload a specific image from the source file, or all of them");
+                        __instance.Print("Better Continents: bc dump - dump all location instance counts to the log/console");
+                        __instance.Print("Better Continents: bc show (filter) - add locations matching optional filter to the map");
+                        __instance.Print("Better Continents: bc bosses");
+                        __instance.Print("Better Continents: bc hide (filter) - add locations matching optional filter to the map");
                     }
 
                     Dictionary<Vector2i, ZoneSystem.LocationInstance> GetLocationInstances() =>
                         (Dictionary<Vector2i, ZoneSystem.LocationInstance>)
                         AccessTools.Field(typeof(ZoneSystem), "m_locationInstances").GetValue(ZoneSystem.instance);
 
-                    if (text.StartsWith("bc dumplocs"))
+                    if (text.StartsWith("bc dump"))
                     {
                         var locationInstances = GetLocationInstances();
                         
@@ -1144,12 +1174,14 @@ namespace BetterContinents
                         }
                     }
                     
-                    if (text == "bc reveallocs" || text.StartsWith("bc reveallocs "))
+                    if (text == "bc show" || text.StartsWith("bc show ") || text == "bc bosses")
                     {
-                        var typeFilters = text == "bc reveallocs" 
+                        var typeFilters = text == "bc show" 
                             ? null
+                            : text == "bc bosses"
+                            ? new List<string>{"StartTemple", "Eikthymir", "GDKing", "GoblinKing", "Bonemass", "Dragonqueen", "Vendor"}
                             : text
-                                .Replace("bc reveallocs ", "")
+                                .Replace("bc show ", "")
                                 .Split(new []{' '}, StringSplitOptions.RemoveEmptyEntries)
                                 .Select(f => f.Trim())
                                 .ToList();
@@ -1170,12 +1202,12 @@ namespace BetterContinents
                         }
                     }
                     
-                    if (text ==  "bc hidelocs" || text.StartsWith("bc hidelocs "))
+                    if (text ==  "bc hide" || text.StartsWith("bc hide "))
                     {
-                        var typeFilters = text == "bc hidelocs" 
+                        var typeFilters = text == "bc hide" 
                             ? null
                             : text
-                                .Replace("bc hidelocs ", "")
+                                .Replace("bc hide ", "")
                                 .Split(new []{' '}, StringSplitOptions.RemoveEmptyEntries)
                                 .Select(f => f.Trim())
                                 .ToList();
@@ -1201,6 +1233,20 @@ namespace BetterContinents
                             }
                         }
                     }
+                }
+            }
+        }
+
+        [HarmonyPatch(typeof(FejdStartup))]
+        private class FejdStartupPatch
+        {
+            [HarmonyPostfix, HarmonyPatch("ShowConnectError")]
+            private static void ShowConnectErrorPrefix(Text ___m_connectionFailedError)
+            {
+                if (LastConnectionError != null)
+                {
+                    ___m_connectionFailedError.text = LastConnectionError;
+                    LastConnectionError = null;
                 }
             }
         }

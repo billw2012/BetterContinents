@@ -1,5 +1,9 @@
-﻿using System.Linq;
+﻿using System.Collections.Generic;
+using System.Diagnostics;
+using System.Linq;
+using System.Threading.Tasks;
 using UnityEngine;
+using Debug = UnityEngine.Debug;
 
 namespace BetterContinents
 {
@@ -50,15 +54,28 @@ namespace BetterContinents
 
         protected override bool LoadTextureToMap(Texture2D tex)
         {
-            float ColorDistance(Color a, Color b) =>
+            float ColorDistance(Color a, Color b) => 
                 Vector3.Distance(new Vector3(a.r, a.g, a.b), new Vector3(b.r, b.g, b.b));
 
             var pixels = tex.GetPixels();
-            Map = new Heightmap.Biome[pixels.Length]; 
+            
+            Map = new Heightmap.Biome[pixels.Length];
+            
+            var st = new Stopwatch();
+            st.Start();
+            
+            var colorMapping = new Dictionary<Color, Heightmap.Biome>();
             for (int i = 0; i < pixels.Length; i++)
             {
-                Map[i] = BiomeColorMapping.OrderBy(d => ColorDistance(pixels[i], d.color)).First().biome;
+                if (!colorMapping.TryGetValue(pixels[i], out var biome))
+                {
+                    biome = BiomeColorMapping.OrderBy(d => ColorDistance(pixels[i], d.color)).First().biome;
+                    colorMapping.Add(pixels[i], biome);
+                }
+                Map[i] = biome;
             }
+            
+            BetterContinents.Log($"Time to calculate biomes: {st.ElapsedMilliseconds} ms");
             return true;
         }
 
