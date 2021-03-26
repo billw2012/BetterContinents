@@ -34,9 +34,8 @@
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
   </PropertyGroup>
   <ItemGroup>
-    <Reference Include="0Harmony, Version=2.3.2.0, Culture=neutral, PublicKeyToken=null">
+    <Reference Include="0Harmony, Version=2.4.0.0, Culture=neutral, PublicKeyToken=null">
       <HintPath>..\..\..\..\..\Program Files (x86)\Steam\steamapps\common\Valheim\BepInEx\core\0Harmony.dll</HintPath>
-      <Private>False</Private>
     </Reference>
     <Reference Include="assembly_guiutils, Version=0.0.0.0, Culture=neutral, PublicKeyToken=null">
       <HintPath>..\..\..\..\..\Program Files (x86)\Steam\steamapps\common\Valheim\valheim_Data\Managed\publicized_assemblies\assembly_guiutils_publicized.dll</HintPath>
@@ -88,6 +87,8 @@
   </ItemGroup>
   <ItemGroup>
     <Compile Include="BetterContinents.cs" />
+    <Compile Include="ConfigHelpers.cs" />
+    <Compile Include="ConfigurationManagerAttributes.cs" />
     <Compile Include="ImageMapBase.cs" />
     <Compile Include="ImageMapBiome.cs" />
     <Compile Include="ImageMapFloat.cs" />

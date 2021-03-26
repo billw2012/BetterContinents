@@ -4,12 +4,9 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Reflection;
-using System.Security.Policy;
-using System.Threading;
 using BepInEx;
 using BepInEx.Configuration;
 using HarmonyLib;
-using MonoMod.Utils;
 using UnityEngine;
 using UnityEngine.Assertions;
 using UnityEngine.UI;
@@ -22,6 +19,16 @@ namespace BetterContinents
         // See the Awake function for the config descriptions
         private static ConfigEntry<bool> ConfigEnabled;
         
+        private static ConfigEntry<float> ConfigContinentSize;
+        private static ConfigEntry<float> ConfigMountainsAmount;
+        private static ConfigEntry<float> ConfigSeaLevelAdjustment;
+        private static ConfigEntry<bool> ConfigOceanChannelsEnabled;
+        private static ConfigEntry<bool> ConfigRiversEnabled;
+        private static ConfigEntry<bool> ConfigMapEdgeDropoff;
+        private static ConfigEntry<bool> ConfigMountainsAllowedAtCenter;
+
+        private static ConfigEntry<string> ConfigMapSourceDir;
+        
         private static ConfigEntry<string> ConfigHeightmapFile;
         private static ConfigEntry<float> ConfigHeightmapAmount;
         private static ConfigEntry<float> ConfigHeightmapBlend;
@@ -30,23 +37,24 @@ namespace BetterContinents
         private static ConfigEntry<string> ConfigBiomemapFile;
 
         private static ConfigEntry<string> ConfigSpawnmapFile;
-
-        private static ConfigEntry<float> ConfigContinentSize;
-        private static ConfigEntry<float> ConfigMountainsAmount;
-        private static ConfigEntry<float> ConfigSeaLevelAdjustment;
-        private static ConfigEntry<bool> ConfigOceanChannelsEnabled;
-        private static ConfigEntry<bool> ConfigRiversEnabled;
-        // Perhaps lakes aren't a thing? Hard to tell... Maybe they are biome specific
-        //private static ConfigEntry<bool> ConfigLakesEnabled;
+        
+        private static ConfigEntry<string> ConfigRoughmapFile;
+        private static ConfigEntry<float> ConfigRoughmapBlend;
+        
+        private static ConfigEntry<bool> ConfigUseRoughInvertedForFlat;
+        private static ConfigEntry<string> ConfigFlatmapFile;
+        private static ConfigEntry<float> ConfigFlatmapBlend;
+        
+        private static ConfigEntry<float> ConfigForestScale;
+        private static ConfigEntry<float> ConfigForestAmount;
+        private static ConfigEntry<string> ConfigForestmapFile;
+        private static ConfigEntry<float> ConfigForestmapBlend;
         
         private static ConfigEntry<float> ConfigMaxRidgeHeight;
         private static ConfigEntry<float> ConfigRidgeSize;
         private static ConfigEntry<float> ConfigRidgeBlend;
         private static ConfigEntry<float> ConfigRidgeAmount;
         
-        private static ConfigEntry<float> ConfigForestScale;
-        private static ConfigEntry<float> ConfigForestAmount;
-
         private static ConfigEntry<bool> ConfigOverrideStartPosition;
         private static ConfigEntry<float> ConfigStartPositionX;
         private static ConfigEntry<float> ConfigStartPositionY;
@@ -110,14 +118,29 @@ namespace BetterContinents
 
             // Version 3
             // <none>
+            
+            // Version 4
+            public float RoughmapBlend;
+            
+            public bool UseRoughInvertedAsFlat;
+            public float FlatmapBlend;
+            
+            public float ForestmapBlend;
+
+            public bool DisableMapEdgeDropoff;
+            public bool MountainsAllowedAtCenter;
 
             // Non-serialized
             private ImageMapFloat Heightmap;
             private ImageMapBiome Biomemap;
             private ImageMapSpawn Spawnmap;
+            private ImageMapFloat Roughmap;
+            private ImageMapFloat Flatmap;
+            private ImageMapFloat Forestmap;
 
             public bool OverrideBiomes => this.Biomemap != null;
             public bool UseSpawnmap => this.Spawnmap != null;
+            public bool UseRoughmap => this.Roughmap != null && this.RoughmapBlend > 0;
             
             public static BetterContinentsSettings Create(long worldUId)
             {
@@ -133,6 +156,29 @@ namespace BetterContinents
                 return settings;
             }
 
+            private static string GetPath(string folderFileName, string defaultFileName)
+            {
+                if (!string.IsNullOrEmpty(ConfigMapSourceDir.Value))
+                {
+                    if (File.Exists(Path.Combine(ConfigMapSourceDir.Value, folderFileName)))
+                    {
+                        return Path.Combine(ConfigMapSourceDir.Value, folderFileName);
+                    }
+                    else
+                    {
+                        return string.Empty;
+                    }
+                }
+                return defaultFileName;
+            }
+
+            private static string HeightmapPath() => GetPath("Heightmap.png", ConfigHeightmapFile.Value);
+            private static string BiomemapPath() => GetPath("Biomemap.png", ConfigBiomemapFile.Value);
+            private static string SpawnmapPath() => GetPath("Spawnmap.png", ConfigSpawnmapFile.Value);
+            private static string RoughmapPath() => GetPath("Roughmap.png", ConfigRoughmapFile.Value);
+            private static string FlatmapPath() => ConfigUseRoughInvertedForFlat.Value? null : GetPath("Flatmap.png", ConfigFlatmapFile.Value);
+            private static string ForestmapPath() => GetPath("Forestmap.png", ConfigForestmapFile.Value);
+            
             private void InitSettings(long worldUId, bool enabled)
             {
                 Log($"Init settings for new world");
@@ -154,35 +200,28 @@ namespace BetterContinents
                     RidgeBlendSigmoidB = Mathf.Lerp(-30f, -10f, ConfigRidgeBlend.Value);
                     RidgeBlendSigmoidXOffset = Mathf.Lerp(1f, 0.35f, ConfigRidgeAmount.Value);
 
-                    if (!string.IsNullOrEmpty(ConfigHeightmapFile.Value))
+                    var heightmapPath = HeightmapPath();
+                    if (!string.IsNullOrEmpty(heightmapPath))
                     {
                         HeightmapAmount = ConfigHeightmapAmount.Value;
                         HeightmapBlend = ConfigHeightmapBlend.Value;
                         HeightmapAdd = ConfigHeightmapAdd.Value;
 
-                        Heightmap = new ImageMapFloat(ConfigHeightmapFile.Value);
+                        Heightmap = new ImageMapFloat(heightmapPath);
                         if (!Heightmap.LoadSourceImage() || !Heightmap.CreateMap())
                         {
                             Heightmap = null;
                         }
                     }
-                    else
+
+                    var biomemapPath = BiomemapPath();
+                    if (!string.IsNullOrEmpty(biomemapPath))
                     {
-                        Heightmap = null;
-                    }
-                    
-                    
-                    if (!string.IsNullOrEmpty(ConfigBiomemapFile.Value))
-                    {
-                        Biomemap = new ImageMapBiome(ConfigBiomemapFile.Value);
+                        Biomemap = new ImageMapBiome(biomemapPath);
                         if (!Biomemap.LoadSourceImage() || !Biomemap.CreateMap())
                         {
                             Biomemap = null;
                         }
-                    }
-                    else
-                    {
-                        Biomemap = null;
                     }
 
                     OceanChannelsEnabled = ConfigOceanChannelsEnabled.Value;
@@ -196,18 +235,58 @@ namespace BetterContinents
                     StartPositionY = ConfigStartPositionY.Value;
                     //LakesEnabled = ConfigLakesEnabled.Value;
                     
-                    if (!string.IsNullOrEmpty(ConfigSpawnmapFile.Value))
+                    var spawnmapPath = SpawnmapPath();
+                    if (!string.IsNullOrEmpty(spawnmapPath))
                     {
-                        Spawnmap = new ImageMapSpawn(ConfigSpawnmapFile.Value);
+                        Spawnmap = new ImageMapSpawn(spawnmapPath);
                         if (!Spawnmap.LoadSourceImage() || !Spawnmap.CreateMap())
                         {
                             Spawnmap = null;
                         }
                     }
-                    else
+
+                    var roughmapPath = RoughmapPath();
+                    if (!string.IsNullOrEmpty(roughmapPath))
                     {
-                        Spawnmap = null;
+                        RoughmapBlend = ConfigRoughmapBlend.Value;
+                        
+                        Roughmap = new ImageMapFloat(roughmapPath);
+                        if (!Roughmap.LoadSourceImage() || !Roughmap.CreateMap())
+                        {
+                            Roughmap = null;
+                        }
                     }
+
+                    var flatmapPath = FlatmapPath();
+                    if (ConfigUseRoughInvertedForFlat.Value && Roughmap != null ||
+                        !ConfigUseRoughInvertedForFlat.Value && string.IsNullOrEmpty(flatmapPath))
+                    {
+                        UseRoughInvertedAsFlat = ConfigUseRoughInvertedForFlat.Value;
+                        FlatmapBlend = ConfigFlatmapBlend.Value;
+                        if (!string.IsNullOrEmpty(flatmapPath) && !UseRoughInvertedAsFlat)
+                        {
+                            Flatmap = new ImageMapFloat(flatmapPath);
+                            if (!Flatmap.LoadSourceImage() || !Flatmap.CreateMap())
+                            {
+                                Flatmap = null;
+                            }
+                        }
+                    }
+                    
+                    var forestmapPath = ForestmapPath();
+                    if (!string.IsNullOrEmpty(forestmapPath))
+                    {
+                        ForestmapBlend = ConfigForestmapBlend.Value;
+                        
+                        Forestmap = new ImageMapFloat(forestmapPath);
+                        if (!Forestmap.LoadSourceImage() || !Forestmap.CreateMap())
+                        {
+                            Forestmap = null;
+                        }
+                    }
+
+                    DisableMapEdgeDropoff = !ConfigMapEdgeDropoff.Value;
+                    MountainsAllowedAtCenter = ConfigMountainsAllowedAtCenter.Value;
                 }
             }
 
@@ -222,6 +301,15 @@ namespace BetterContinents
                 
                 if (EnabledForThisWorld)
                 {
+                    Log($"GlobalScale {GlobalScale}");
+                    Log($"MountainsAmount {MountainsAmount}");
+                    Log($"SeaLevelAdjustment {SeaLevelAdjustment}");
+                    Log($"OceanChannelsEnabled {OceanChannelsEnabled}");
+                    Log($"RiversEnabled {RiversEnabled}");
+                    
+                    Log($"DisableMapEdgeDropoff {DisableMapEdgeDropoff}");
+                    Log($"MountainsAllowedAtCenter {MountainsAllowedAtCenter}");
+                    
                     if (Heightmap != null)
                     {
                         Log($"Heightmap file {Heightmap.FilePath}");
@@ -251,17 +339,46 @@ namespace BetterContinents
                     {
                         Log($"Spawnmap disabled");
                     }
+                    
+                    if (Roughmap != null)
+                    {
+                        Log($"Roughmap file {Roughmap.FilePath}");
+                        Log($"Roughmap size {Roughmap.Size}x{Roughmap.Size}, blend {RoughmapBlend}");
+                    }
+                    else
+                    {
+                        Log($"Roughmap disabled");
+                    }
 
-                    Log($"GlobalScale {GlobalScale}");
-                    Log($"MountainsAmount {MountainsAmount}");
-                    Log($"SeaLevelAdjustment {SeaLevelAdjustment}");
-                    Log($"OceanChannelsEnabled {OceanChannelsEnabled}");
-                    Log($"RiversEnabled {RiversEnabled}");
+                    if (UseRoughInvertedAsFlat)
+                    {
+                        Log($"Using inverted Roughmap as Flatmap");
+                    }
+                    else
+                    {
+                        if (Flatmap != null)
+                        {
+                            Log($"Flatmap file {Flatmap.FilePath}");
+                            Log($"Flatmap size {Flatmap.Size}x{Flatmap.Size}, blend {FlatmapBlend}");
+                        }
+                        else
+                        {
+                            Log($"Flatmap disabled");
+                        }
+                    }
                     
                     Log($"ForestScale {ForestScale}");
                     Log($"ForestAmount {ForestAmountOffset}");
-                    //Log($"LakesEnabled {LakesEnabled}");
-
+                    if (Forestmap != null)
+                    {
+                        Log($"Forestmap file {Forestmap.FilePath}");
+                        Log($"Forestmap size {Forestmap.Size}x{Forestmap.Size}, blend {ForestmapBlend}");
+                    }
+                    else
+                    {
+                        Log($"Forestmap disabled");
+                    }
+                    
                     Log($"MaxRidgeHeight {MaxRidgeHeight}");
                     Log($"RidgeScale {RidgeScale}");
                     Log($"RidgeBlendSigmoidB {RidgeBlendSigmoidB}");
@@ -337,6 +454,38 @@ namespace BetterContinents
                         {
                             Spawnmap.Serialize(pkg);
                         }
+                    }
+                    
+                    // Version 4
+                    if (Version >= 4)
+                    {
+                        pkg.Write(Roughmap?.FilePath ?? string.Empty);
+                        if (Roughmap != null)
+                        {
+                            pkg.Write(Roughmap.SourceData);
+                            pkg.Write(RoughmapBlend);
+                        }
+
+                        pkg.Write(UseRoughInvertedAsFlat);
+                        pkg.Write(FlatmapBlend);
+                        if (!UseRoughInvertedAsFlat)
+                        {
+                            pkg.Write(Flatmap?.FilePath ?? string.Empty);
+                            if (Flatmap != null)
+                            {
+                                pkg.Write(Flatmap.SourceData);
+                            }
+                        }
+
+                        pkg.Write(Forestmap?.FilePath ?? string.Empty);
+                        if (Forestmap != null)
+                        {
+                            pkg.Write(Forestmap.SourceData);
+                            pkg.Write(ForestmapBlend);
+                        }
+                        
+                        pkg.Write(DisableMapEdgeDropoff);
+                        pkg.Write(MountainsAllowedAtCenter);
                     }
                 }
             }
@@ -429,6 +578,50 @@ namespace BetterContinents
                             Spawnmap = new ImageMapSpawn(spawnmapFilePath, pkg);
                         }
                     }
+                    
+                    // Version 4
+                    if (Version >= 4)
+                    {
+                        var roughmapFilePath = pkg.ReadString();
+                        if (!string.IsNullOrEmpty(roughmapFilePath))
+                        {
+                            Roughmap = new ImageMapFloat(roughmapFilePath, pkg.ReadByteArray());
+                            if (!Roughmap.CreateMap())
+                            {
+                                Roughmap = null;
+                            }
+                            RoughmapBlend = pkg.ReadSingle();
+                        }
+
+                        UseRoughInvertedAsFlat = pkg.ReadBool();
+                        FlatmapBlend = pkg.ReadSingle();
+                        if (!UseRoughInvertedAsFlat)
+                        {
+                            var flatmapFilePath = pkg.ReadString();
+                            if (!string.IsNullOrEmpty(flatmapFilePath))
+                            {
+                                Flatmap = new ImageMapFloat(flatmapFilePath, pkg.ReadByteArray());
+                                if (!Flatmap.CreateMap())
+                                {
+                                    Flatmap = null;
+                                }
+                            }
+                        }
+
+                        var forestmapFilePath = pkg.ReadString();
+                        if (!string.IsNullOrEmpty(forestmapFilePath))
+                        {
+                            Forestmap = new ImageMapFloat(forestmapFilePath, pkg.ReadByteArray());
+                            if (!Forestmap.CreateMap())
+                            {
+                                Forestmap = null;
+                            }
+                            ForestmapBlend = pkg.ReadSingle();
+                        }
+                        
+                        DisableMapEdgeDropoff = pkg.ReadBool();
+                        MountainsAllowedAtCenter = pkg.ReadBool();
+                    }
                 }
             }
 
@@ -443,11 +636,107 @@ namespace BetterContinents
 
                 return Mathf.Lerp(height, h * HeightmapAmount, this.HeightmapBlend) + h * this.HeightmapAdd;
             }
+            
+            public float ApplyRoughmap(float x, float y, float smoothHeight, float roughHeight)
+            {
+                if (this.Roughmap == null || this.RoughmapBlend == 0)
+                {
+                    return roughHeight;
+                }
 
-            public Heightmap.Biome GetBiomeOverride(WorldGenerator __instance, float mapX, float mapY) => this.Biomemap.GetValue(mapX, mapY);
+                float r = this.Roughmap.GetValue(x, y);
+
+                return Mathf.Lerp(smoothHeight, roughHeight, r * this.RoughmapBlend);
+            }
+            
+            public float ApplyFlatmap(float x, float y, float flatHeight, float height)
+            {
+                if ((this.UseRoughInvertedAsFlat && this.Roughmap == null) || (!this.UseRoughInvertedAsFlat && this.Flatmap == null) || this.RoughmapBlend == 0)
+                {
+                    return height;
+                }
+
+                float f = this.UseRoughInvertedAsFlat ? 1 - this.Roughmap.GetValue(x, y) : this.Flatmap.GetValue(x, y); 
+
+                return Mathf.Lerp(height, flatHeight, f * this.FlatmapBlend);
+            }
+            
+            public float ApplyForest(float x, float y, float forest)
+            {
+                if (this.Forestmap != null && this.ForestmapBlend != 0)
+                {
+                    // Forest is visible when "forest factor" is less than 1.15f, so invert the forest map, and scale it so that 0.5f gray is 1.15f forest factor.
+                    return Mathf.Lerp(forest, (1 - this.Forestmap.GetValue(x, y)) * 2.3f, ForestmapBlend) + ForestAmountOffset;
+                }
+                else
+                {
+                    return forest + ForestAmountOffset;
+                }
+            }
+            
+            public Heightmap.Biome GetBiomeOverride(float mapX, float mapY) => this.Biomemap.GetValue(mapX, mapY);
 
             public Vector2? FindSpawn(string spawn) => this.Spawnmap.FindSpawn(spawn);
             public IEnumerable<Vector2> GetAllSpawns(string spawn) => this.Spawnmap.GetAllSpawns(spawn);
+
+            public void ReloadHeightmap()
+            {
+                if (Heightmap != null)
+                {
+                    if (Heightmap.LoadSourceImage())
+                    {
+                        Heightmap.CreateMap();
+                    }
+                }
+            }
+            
+            public void ReloadBiomemap()
+            {
+                if (Biomemap != null)
+                {
+                    if (Biomemap.LoadSourceImage())
+                    {
+                        Biomemap.CreateMap();
+                    }
+                }
+            }
+            
+            public void ReloadSpawnmap()
+            {
+                if (Spawnmap != null)
+                {
+                    if (Spawnmap.LoadSourceImage())
+                    {
+                        Spawnmap.CreateMap();
+                    }
+                }
+            }       
+            
+            public void ReloadRoughmap()
+            {
+                if (Roughmap != null)
+                {
+                    if (Roughmap.LoadSourceImage())
+                    {
+                        Roughmap.CreateMap();
+                    }
+                }
+            }
+                        
+            public void ReloadFlatmap()
+            {
+                if (UseRoughInvertedAsFlat)
+                {
+                    ReloadRoughmap();
+                }
+                else if (Flatmap != null)
+                {
+                    if (Flatmap.LoadSourceImage())
+                    {
+                        Flatmap.CreateMap();
+                    }
+                }
+            }
         }
         
         private static BetterContinentsSettings Settings;
@@ -457,54 +746,53 @@ namespace BetterContinents
             // Cos why...
             // Application.SetStackTraceLogType(LogType.Log, StackTraceLogType.None);
             // Application.SetStackTraceLogType(LogType.Warning, StackTraceLogType.None);
-            
-            ConfigEnabled = Config.Bind("BetterContinents.Global", "Enabled", true, "Whether this mod is enabled");
 
-            ConfigHeightmapFile = Config.Bind("BetterContinents.Heightmap", "HeightmapFile", "", "Path to a heightmap file to use. See the description on Nexusmods.com for the specifications (it will fail if they are not met).");
-            ConfigHeightmapAmount = Config.Bind("BetterContinents.Heightmap", "HeightmapAmount", 1f,
-                new ConfigDescription("Multiplier of the height value from the heightmap file", new AcceptableValueRange<float>(0, 1)));
-            ConfigHeightmapBlend = Config.Bind("BetterContinents.Heightmap", "HeightmapBlend", 1f,
-                new ConfigDescription("How strongly to blend the heightmap file into the final result", new AcceptableValueRange<float>(0, 1)));
-            ConfigHeightmapAdd = Config.Bind("BetterContinents.Heightmap", "HeightmapAdd", 0f,
-                new ConfigDescription("How strongly to add the heightmap file to the final result (usually you want to blend it instead)", new AcceptableValueRange<float>(-1, 1)));
-
-            ConfigBiomemapFile = Config.Bind("BetterContinents.Biomemap", "Biomemap", "", "Path to a biome map file to use. See the description on Nexusmods.com for the specifications (it will fail if they are not met).");
-
-            ConfigSpawnmapFile = Config.Bind("BetterContinents.Spawnmap", "Spawnmap", "", "Path to a spawn map file to use. See the description on Nexusmods.com for the specifications (it will fail if they are not met).");
-            
-            ConfigContinentSize = Config.Bind("BetterContinents.Global", "ContinentSize", 0.5f,
-                new ConfigDescription("Continent Size", new AcceptableValueRange<float>(0, 1)));
-            ConfigMountainsAmount = Config.Bind("BetterContinents.Global", "MountainsAmount", 0.5f,
-                new ConfigDescription("Mountains amount", new AcceptableValueRange<float>(0, 1)));
-            ConfigSeaLevelAdjustment = Config.Bind("BetterContinents.Global", "SeaLevelAdjustment", 0.5f,
-                new ConfigDescription("Modify sea level, which changes the land:sea ratio", new AcceptableValueRange<float>(0, 1)));
-            ConfigOceanChannelsEnabled = Config.Bind("BetterContinents.Global", "OceanChannelsEnabled", true, "Whether ocean channels should be enabled or not (useful to disable when using height map for instance)");
-            ConfigRiversEnabled = Config.Bind("BetterContinents.Global", "RiversEnabled", true, "Whether rivers should be enabled or not");
-            
-            ConfigForestScale = Config.Bind("BetterContinents.Global", "ForestScale", 0.5f,
-                new ConfigDescription("Scales forested/cleared area size", new AcceptableValueRange<float>(0, 1)));
-            ConfigForestAmount = Config.Bind("BetterContinents.Global", "ForestAmount", 0.5f,
-                new ConfigDescription("Adjusts how much forest there is, relative to clearings", new AcceptableValueRange<float>(0, 1)));
-            //ConfigLakesEnabled = Config.Bind("BetterContinents.Global", "LakesEnabled", true, "Whether 'lakes' should be enabled or not");
-
-            ConfigMaxRidgeHeight = Config.Bind("BetterContinents.Ridges", "MaxRidgeHeight", 0.5f,
-                new ConfigDescription("Max height of ridge features", new AcceptableValueRange<float>(0, 1)));
-            ConfigRidgeSize = Config.Bind("BetterContinents.Ridges", "RidgeSize", 0.5f,
-                new ConfigDescription("Size of ridge features", new AcceptableValueRange<float>(0, 1)));
-            ConfigRidgeBlend = Config.Bind("BetterContinents.Ridges", "RidgeBlend", 0.5f,
-                new ConfigDescription("Smoothness of ridges blending into base terrain", new AcceptableValueRange<float>(0, 1)));
-            ConfigRidgeAmount = Config.Bind("BetterContinents.Ridges", "RidgeAmount", 0.5f,
-                new ConfigDescription("How much ridges", new AcceptableValueRange<float>(0, 1)));
-
-            ConfigOverrideStartPosition = Config.Bind("BetterContinents.StartPosition", "OverrideStartPosition", false, "Whether to override the start position using the values provided (warning: will disable all validation of the position)");
-            ConfigStartPositionX = Config.Bind("BetterContinents.StartPosition", "StartPositionX", 0f,
-                new ConfigDescription("Start position override X value, in ranges -10500 to 10500", new AcceptableValueRange<float>(-10500, 10500)));
-            ConfigStartPositionY = Config.Bind("BetterContinents.StartPosition", "StartPositionY", 0f,
-                new ConfigDescription("Start position override Y value, in ranges -10500 to 10500", new AcceptableValueRange<float>(-10500, 10500)));
-            
-            ConfigDebugSkipDefaultLocationPlacement = Config.Bind("BetterContinents.Debug", "SkipDefaultLocationPlacement", false, "Skips default location placement during world gen (spawn temple and spawnmap are still placed), for quickly testing the heightmap itself.");
-            
-            ConfigDebugModeEnabled = Config.Bind("BetterContinents.Debug", "DebugMode", false, "Automatically reveals the full map on respawn, enables cheat mode, and debug mode, for debugging purposes.");
+            Config.Declare()
+                .Group("BetterContinents.Global")
+                    .Value("Enabled").Description("Whether this mod is enabled").Default(true).Bind(out ConfigEnabled)
+                    .Value("Continent Size").Description("Continent size").Default(0.5f).Range(0f, 1f).Bind(out ConfigContinentSize)
+                    .Value("Mountains Amount").Description("Mountains amount").Default(0.5f).Range(0f, 1f).Bind(out ConfigMountainsAmount)
+                    .Value("Sea Level Adjustment").Description("Modify sea level, which changes the land:sea ratio").Default(0.5f).Range(0f, 1f).Bind(out ConfigSeaLevelAdjustment)
+                    .Value("Ocean Channels").Description("Whether ocean channels should be enabled or not (useful to disable when using height map for instance)").Default(true).Bind(out ConfigOceanChannelsEnabled)
+                    .Value("Rivers").Description("Whether rivers should be enabled or not").Default(true).Bind(out ConfigRiversEnabled)
+                    .Value("Map Edge Drop-off").Description("Whether the map should drop off at the edges or not (consequences unknown!)").Default(true).Bind(out ConfigMapEdgeDropoff)
+                    .Value("Mountains Allowed At Center").Description("Whether the map should allow mountains to occur at the map center (if you have default spawn then you should keep this unchecked)").Default(false).Bind(out ConfigMountainsAllowedAtCenter)
+                .Group("BetterContinents.Project")
+                    .Value("Directory").Description("This directory will load automatically any existing map files matching the correct names, overriding specific files specified below. Filenames must match: heightmap.png, biomemap.png, spawnmap.png, roughmap.png, flatmap.png, forestmap.png.").Bind(out ConfigMapSourceDir)
+                .Group("BetterContinents.Heightmap")
+                    .Value("Heightmap File").Description("Path to a heightmap file to use. See the description on Nexusmods.com for the specifications (it will fail if they are not met)").Bind(out ConfigHeightmapFile)
+                    .Value("Heightmap Amount").Description("Multiplier of the height value from the heightmap file (more than 1 leads to higher max height than vanilla, good results are not guaranteed)").Default(1f).Range(0f, 5f).Bind(out ConfigHeightmapAmount)
+                    .Value("Heightmap Blend").Description("How strongly to blend the heightmap file into the final result").Default(1f).Range(0f, 1f).Bind(out ConfigHeightmapBlend)
+                    .Value("Heightmap Add").Description("How strongly to add the heightmap file to the final result (usually you want to blend it instead)").Default(0f).Range(-1f, 1f).Bind(out ConfigHeightmapAdd)
+                .Group("BetterContinents.Biomemap")
+                    .Value("Biomemap").Description("Path to a biomemap file to use. See the description on Nexusmods.com for the specifications (it will fail if they are not met)").Bind(out ConfigBiomemapFile)
+                .Group("BetterContinents.Forest")
+                    .Value("Forest Scale").Description("Scales forested/cleared area size").Default(0.5f).Range(0f, 1f).Bind(out ConfigForestScale)
+                    .Value("Forest Amount").Description("Adjusts how much forest there is, relative to clearings").Default(1f).Range(0f, 1f).Bind(out ConfigForestAmount)
+                    .Value("Forestmap").Description("Path to a forestmap file to use. See the description on Nexusmods.com for the specifications (it will fail if they are not met)").Bind(out ConfigForestmapFile)
+                    .Value("Forestmap Blend").Description("How strongly to apply the forestmap file").Default(1f).Range(0f, 1f).Bind(out ConfigForestmapBlend)
+                .Group("BetterContinents.Spawnmap")
+                    .Value("Spawnmap").Description("Path to a spawnmap file to use. See the description on Nexusmods.com for the specifications (it will fail if they are not met)").Bind(out ConfigSpawnmapFile)
+                .Group("BetterContinents.Roughmap")
+                    .Value("Roughmap").Description("Path to a roughmap file to use. See the description on Nexusmods.com for the specifications (it will fail if they are not met)").Bind(out ConfigRoughmapFile)
+                    .Value("Roughmap Blend").Description("How strongly to apply the roughmap file").Default(1f).Range(0f, 1f).Bind(out ConfigRoughmapBlend)
+                .Group("BetterContinents.Flatmap")
+                    .Value("Use Roughmap For Flatmap").Description("Use the flatmap as the rough map, but inverted (black rough map results in totally flat terrain)").Default(true).Bind(out ConfigUseRoughInvertedForFlat)
+                    .Value("Flatmap").Description("Path to a flatmap file to use. See the description on Nexusmods.com for the specifications (it will fail if they are not met)").Bind(out ConfigFlatmapFile)
+                    .Value("Flatmap Blend").Description("How strongly to apply the flatmap file (also applies when using Use Roughmap For Flatmap)").Default(1f).Range(0f, 1f).Bind(out ConfigFlatmapBlend)
+                .Group("BetterContinents.Ridges")
+                    .Value("Max Ridge Height").Description("Max height of ridge features").Default(0.5f).Range(0f, 1f).Bind(out ConfigMaxRidgeHeight)
+                    .Value("Ridge Size").Description("Size of ridge features").Default(0.5f).Range(0f, 1f).Bind(out ConfigRidgeSize)
+                    .Value("Ridge Blend").Description("Smoothness of ridges blending into base terrain").Default(0.5f).Range(0f, 1f).Bind(out ConfigRidgeBlend)
+                    .Value("Ridge Amount").Description("How much ridges").Default(0.5f).Range(0f, 1f).Bind(out ConfigRidgeAmount)
+                .Group("BetterContinents.StartPosition")
+                    .Value("Override Start Position").Description("Whether to override the start position using the values provided (warning: will disable all validation of the position)").Default(false).Bind(out ConfigOverrideStartPosition)
+                    .Value("Start Position X").Description("Start position override X value, in ranges -10500 to 10500").Default(0f).Range(-10500f, 10500f).Bind(out ConfigStartPositionX)
+                    .Value("Start Position Y").Description("Start position override Y value, in ranges -10500 to 10500").Default(0f).Range(-10500f, 10500f).Bind(out ConfigStartPositionY)
+                .Group("BetterContinents.Debug")
+                    .Value("Debug Mode").Description("Automatically reveals the full map on respawn, enables cheat mode, and debug mode, for debugging purposes").Bind(out ConfigDebugSkipDefaultLocationPlacement)
+                    .Value("Skip Default Location Placement").Description("Skips default location placement during world gen (spawn temple and spawnmap are still placed), for quickly testing the heightmap itself").Bind(out ConfigDebugModeEnabled)
+                ;
 
             new Harmony("BetterContinents.Harmony").PatchAll();
             Log("Awake");
@@ -651,7 +939,7 @@ namespace BetterContinents
             {
                 Log($"Registering settings RPC");
 
-                ServerVersion = "<0.4.3";
+                ServerVersion = "(old)";
 
                 peer.m_rpc.Register("BetterContinentsVersion", (ZRpc rpc, string serverVersion) =>
                 {
@@ -674,7 +962,7 @@ namespace BetterContinents
                     if (hash != packetHash)
                     {
                         LastConnectionError = $"Better Continents settings from server were corrupted";
-                        LogError($"Settings transfer failed: packet hash mismatch got {hash} expected {packetHash}");
+                        LogError($"{LastConnectionError}: packet hash mismatch, got {hash}, expected {packetHash}");
                         ZNet.m_connectionStatus = ZNet.ConnectionStatus.ErrorConnectFailed;
                         ZNet.instance.Disconnect(peer);
                         return;
@@ -699,8 +987,7 @@ namespace BetterContinents
                             if (Settings.EnabledForThisWorld && ServerVersion != ModInfo.Version)
                             {
                                 LastConnectionError = $"Server world has Better Continents enabled, but server mod {ServerVersion} and client mod {ModInfo.Version} don't match";
-                                LogError(
-                                    $"Server sent world with Better Continents enabled, but server mod {ServerVersion} didn't match client mod {ModInfo.Version}");
+                                LogError(LastConnectionError);
                                 ZNet.m_connectionStatus = ZNet.ConnectionStatus.ErrorConnectFailed;
                                 ZNet.instance.Disconnect(peer);
                             }
@@ -711,8 +998,7 @@ namespace BetterContinents
                         }
                         else
                         {
-                            LastConnectionError = $"Better Continents settings from server were corrupted";
-                            LogError($"Settings transfer failed: hash mismatch got {finalHash} expected {SettingsReceiveHash}");
+                            LogError($"{LastConnectionError}: hash mismatch, got {finalHash}, expected {SettingsReceiveHash}");
                             ZNet.m_connectionStatus = ZNet.ConnectionStatus.ErrorConnectFailed;
                             ZNet.instance.Disconnect(peer);
                         }
@@ -787,43 +1073,89 @@ namespace BetterContinents
             }
         }
 
+        // Changes to height, biome, forests, rivers etc. (this is the functional part of the mod)
         [HarmonyPatch(typeof(WorldGenerator))]
         private class WorldGeneratorPatch
         {
             // The base map x, y coordinates in 0..1 range
-            private static float GetMapCoord(float coord) => Mathf.Clamp01(coord / (2 * WorldSize) + 0.5f);
+            private static Dictionary<Vector2, float> cachedHeights; 
+
+            [HarmonyPrefix, HarmonyPatch(nameof(WorldGenerator.Initialize))]
+            private static void InitializePrefix()
+            {
+                cachedHeights = new Dictionary<Vector2, float>(100000);
+;           }
             
             // wx, wy are [-10500, 10500]
             // __result should be [0, 1]
             [HarmonyPrefix, HarmonyPatch("GetBaseHeight")]
             private static bool GetBaseHeightPrefix(ref float wx, ref float wy, bool menuTerrain, ref float __result, float ___m_offset0, float ___m_offset1, float ___m_minMountainDistance)
             {
-                if (!Settings.EnabledForThisWorld)
+                if (!Settings.EnabledForThisWorld || menuTerrain)
                 {
                     return true;
                 }
-
-                if (menuTerrain)
+                
+                if (cachedHeights.TryGetValue(new Vector2(wx, wy), out __result))
                 {
-                    return true;
+                    return false;
                 }
-
+                
                 switch (Settings.Version)
                 {
-                    case 1 :
-                    case 2 : return GetBaseHeightV1(ref wx, ref wy, ref __result, ___m_offset0, ___m_offset1, ___m_minMountainDistance);
-                    case 3 :
-                    default: return GetBaseHeightV2(ref wx, ref wy, ref __result, ___m_offset0, ___m_offset1, ___m_minMountainDistance);
+                    case 1:
+                    case 2:
+                        __result = GetBaseHeightV1(wx, wy, ___m_offset0, ___m_offset1, ___m_minMountainDistance);
+                        break;
+                    case 3:
+                    default:
+                        __result = GetBaseHeightV2(wx, wy, ___m_offset0, ___m_offset1, ___m_minMountainDistance);
+                        break;
                 }
+
+                return false;
             }
+
+                
+            [HarmonyPostfix, HarmonyPatch("GetBaseHeight")]
+            private static void GetBaseHeightPostfix(WorldGenerator __instance, float wx, float wy, float ___m_offset0, float ___m_offset1, bool menuTerrain, float __result)
+            {
+                if (!Settings.EnabledForThisWorld || __instance.m_world.m_menu)
+                {
+                    return;
+                }
+                
+                if (cachedHeights.Count >= 100000)
+                {
+                    // Can't easily do LRU, so we will just clear it entirely
+                    cachedHeights.Clear();
+                }
+                // Do this AFTER clearing so we have it available below
+                cachedHeights[new Vector2(wx, wy)] = __result;
+            }
+
+            private delegate float GetBaseHeightDelegate(WorldGenerator instance, float wx, float wy, bool menuTerrain);
+            private static readonly GetBaseHeightDelegate GetBaseHeightMethod = AccessTools.MethodDelegate<GetBaseHeightDelegate>(AccessTools.Method(typeof(WorldGenerator), "GetBaseHeight"));
             
-            private static bool GetBaseHeightV1(ref float wx, ref float wy, ref float __result, float ___m_offset0, float ___m_offset1, float ___m_minMountainDistance)
+            [HarmonyPostfix, HarmonyPatch("GetBiomeHeight")]
+            private static void GetBiomeHeightPostfix(WorldGenerator __instance, float wx, float wy, ref float __result, World ___m_world)
+            {
+                if (!Settings.EnabledForThisWorld || !Settings.UseRoughmap || __instance.m_world.m_menu)
+                {
+                    return;
+                }
+
+                float smoothHeight = GetBaseHeightMethod(__instance, wx, wy, false) * 200f;
+                __result = Settings.ApplyRoughmap(WorldX(wx), WorldY(wy), smoothHeight, __result);
+            }
+
+            private static float GetBaseHeightV1(float wx, float wy, float ___m_offset0, float ___m_offset1, float ___m_minMountainDistance)
             {
                 float distance = Utils.Length(wx, wy);
                 
                 // The base map x, y coordinates in 0..1 range
-                float mapX = GetMapCoord(wx);
-                float mapY = GetMapCoord(wy);
+                float mapX = NormalizedX(wx);
+                float mapY = NormalizedY(wy);
                 
                 wx *= Settings.GlobalScale;
                 wy *= Settings.GlobalScale;
@@ -886,17 +1218,16 @@ namespace BetterContinents
                     float t3 = Mathf.Clamp01((finalHeight - 0.28f) / 0.099999994f);
                     finalHeight = Mathf.Lerp(Mathf.Lerp(0.28f, 0.38f, t3), finalHeight, Utils.LerpStep(___m_minMountainDistance - 400f, ___m_minMountainDistance, distance));
                 }
-                __result = finalHeight;
-                return false;
+                return finalHeight;
             }
             
-            private static bool GetBaseHeightV2(ref float wx, ref float wy, ref float __result, float ___m_offset0, float ___m_offset1, float ___m_minMountainDistance)
+            private static float GetBaseHeightV2(float wx, float wy, float ___m_offset0, float ___m_offset1, float ___m_minMountainDistance)
             {
                 float distance = Utils.Length(wx, wy);
                 
                 // The base map x, y coordinates in 0..1 range
-                float mapX = GetMapCoord(wx);
-                float mapY = GetMapCoord(wy);
+                float mapX = NormalizedX(wx);
+                float mapY = NormalizedY(wy);
                 
                 wx *= Settings.GlobalScale;
                 wy *= Settings.GlobalScale;
@@ -912,23 +1243,23 @@ namespace BetterContinents
                 float bigFeatureNoiseHeight = Mathf.PerlinNoise(wx * 0.002f * 0.5f, wy * 0.002f * 0.5f) * Mathf.PerlinNoise(wx * 0.003f * 0.5f, wy * 0.003f * 0.5f) * 1f;
                 float bigFeatureHeight = Settings.ApplyHeightmap(mapX, mapY, bigFeatureNoiseHeight);
                 float ridgeHeight = (Mathf.PerlinNoise(warpX * 0.002f * 0.5f, warpY * 0.002f * 0.5f) * Mathf.PerlinNoise(warpX * 0.003f * 0.5f, warpY * 0.003f * 0.5f)) * Settings.MaxRidgeHeight;
-
+                
                 // https://www.desmos.com/calculator/uq8wmu6dy7
                 float SigmoidActivation(float x, float a, float b) => 1 / (1 + Mathf.Exp(a + b * x));
                 float lerp = Mathf.Clamp(SigmoidActivation(Mathf.PerlinNoise(wx * 0.005f - 10000, wy * 0.005f - 5000) - Settings.RidgeBlendSigmoidXOffset, 0, Settings.RidgeBlendSigmoidB), 0, 1);
-                
-                float finalHeight = 0f;
 
                 float bigFeature = Mathf.Clamp(bigFeatureHeight + ridgeHeight * lerp, 0, 1);
-
+                
                 const float SeaLevel = 0.05f;
                 float ApplyMountains(float x, float n) => x * (1 - Mathf.Pow(1 - x, 1.2f + n * 0.8f)) + x * (1 - x);
+                
+                float detailedFinalHeight = ApplyMountains(bigFeature - SeaLevel, Settings.MountainsAmount) + SeaLevel;
 
-                finalHeight += ApplyMountains(bigFeature - SeaLevel, Settings.MountainsAmount) + SeaLevel;
+                // Finer height variation
+                detailedFinalHeight += Mathf.PerlinNoise(wx * 0.002f * 1f, wy * 0.002f * 1f) * Mathf.PerlinNoise(wx * 0.003f * 1f, wy * 0.003f * 1f) * detailedFinalHeight * 0.9f;
+                detailedFinalHeight += Mathf.PerlinNoise(wx * 0.005f * 1f, wy * 0.005f * 1f) * Mathf.PerlinNoise(wx * 0.01f * 1f, wy * 0.01f * 1f) * 0.5f * detailedFinalHeight;
 
-                finalHeight += Mathf.PerlinNoise(wx * 0.002f * 1f, wy * 0.002f * 1f) * Mathf.PerlinNoise(wx * 0.003f * 1f, wy * 0.003f * 1f) * finalHeight * 0.9f;
-
-                finalHeight += Mathf.PerlinNoise(wx * 0.005f * 1f, wy * 0.005f * 1f) * Mathf.PerlinNoise(wx * 0.01f * 1f, wy * 0.01f * 1f) * 0.5f * finalHeight;
+                float finalHeight = Settings.ApplyFlatmap(mapX, mapY, bigFeatureHeight, detailedFinalHeight);
 
                 finalHeight -= 0.07f;
 
@@ -944,7 +1275,7 @@ namespace BetterContinents
                 }
 
                 // Edge of the world
-                if (distance > 10000f)
+                if (!Settings.DisableMapEdgeDropoff && distance > 10000f)
                 {
                     float t = Utils.LerpStep(10000f, 10500f, distance);
                     finalHeight = Mathf.Lerp(finalHeight, -0.2f, t);
@@ -954,39 +1285,39 @@ namespace BetterContinents
                         finalHeight = Mathf.Lerp(finalHeight, -2f, t2);
                     }
                 }
-                if (distance < ___m_minMountainDistance && finalHeight > 0.28f)
+                
+                // Avoid mountains in the center
+                if (!Settings.MountainsAllowedAtCenter && distance < ___m_minMountainDistance && finalHeight > 0.28f)
                 {
                     float t3 = Mathf.Clamp01((finalHeight - 0.28f) / 0.099999994f);
                     finalHeight = Mathf.Lerp(Mathf.Lerp(0.28f, 0.38f, t3), finalHeight, Utils.LerpStep(___m_minMountainDistance - 400f, ___m_minMountainDistance, distance));
                 }
-                __result = finalHeight;
-                return false;
+                return finalHeight;
             }
 
             // We must come after WorldGenOptions, as that mod always replaces the GetBiome function.
             // Note in HarmonyX (which BepInEx uses), all prefixes always run, unless they opt out themselves.
             // So coming BEFORE a prefex and returning false doesn't stop that prefix from running.
             [HarmonyPrefix, HarmonyPatch(nameof(WorldGenerator.GetBiome), typeof(float), typeof(float)), HarmonyAfter("org.github.spacedrive.worldgen")]
-            private static bool GetBiomePrefix(WorldGenerator __instance, float wx, float wy, ref Heightmap.Biome __result, World ___m_world)
+            private static bool GetBiomePrefix(WorldGenerator __instance, float wx, float wy, ref Heightmap.Biome __result)
             {
-                if (!Settings.EnabledForThisWorld || ___m_world.m_menu || !Settings.OverrideBiomes)
+                if (!Settings.EnabledForThisWorld || __instance.m_world.m_menu || !Settings.OverrideBiomes)
                 {
                     return true;
                 }
                 else
                 {
-                    float mapX = GetMapCoord(wx);
-                    float mapY = GetMapCoord(wy);
-                    __result = Settings.GetBiomeOverride(__instance, mapX, mapY);
+                    var normalized = WorldToNormalized(wx, wy);
+                    __result = Settings.GetBiomeOverride(normalized.x, normalized.y);
 
                     return false;
                 }
             }
             
             [HarmonyPrefix, HarmonyPatch("AddRivers")]
-            private static bool AddRiversPrefix(ref float __result, float h)
+            private static bool AddRiversPrefix(WorldGenerator __instance, ref float __result, float h)
             {
-                if (!Settings.EnabledForThisWorld || Settings.RiversEnabled)
+                if (!Settings.EnabledForThisWorld || __instance.m_world.m_menu || Settings.RiversEnabled)
                 {
                     // Fall through to normal function
                     return true;
@@ -999,20 +1330,20 @@ namespace BetterContinents
             }
 
             [HarmonyPrefix, HarmonyPatch(nameof(WorldGenerator.GetForestFactor))]
-            private static void GetForestFactorPrefix(ref Vector3 pos)
+            private static void GetForestFactorPrefix(WorldGenerator __instance, ref Vector3 pos)
             {
-                if (Settings.EnabledForThisWorld && Settings.ForestScale != 1)
+                if (Settings.EnabledForThisWorld && !__instance.m_world.m_menu && Settings.ForestScale != 1)
                 {
                     pos *= Settings.ForestScale;
                 }
             }
             
             [HarmonyPostfix, HarmonyPatch(nameof(WorldGenerator.GetForestFactor))]
-            private static void GetForestFactorPostfix(ref float __result)
+            private static void GetForestFactorPostfix(WorldGenerator __instance, Vector3 pos, ref float __result)
             {
-                if (Settings.EnabledForThisWorld && Settings.ForestAmountOffset != 0)
+                if (Settings.EnabledForThisWorld && !__instance.m_world.m_menu)
                 {
-                    __result += Settings.ForestAmountOffset;
+                    __result = Settings.ApplyForest(NormalizedX(pos.x), NormalizedY(pos.z), __result);
                 }
             }
         }
@@ -1022,7 +1353,15 @@ namespace BetterContinents
         private class ZoneSystemPatch
         {
             private static readonly MethodInfo RegisterLocation = AccessTools.Method(typeof(ZoneSystem), "RegisterLocation");
-            
+
+            [HarmonyPostfix, HarmonyPatch(nameof(ZoneSystem.ValidateVegetation))]
+            private static void ValidateVegetationPostfix(ZoneSystem __instance)
+            {
+                foreach (var v in __instance.m_vegetation)
+                {
+                    Log($"{v.m_name}, {v.m_prefab}, {v.m_biomeArea}, {v.m_biome}, {v.m_inForest}, {v.m_forestTresholdMin}, {v.m_forestTresholdMax}, {v.m_forcePlacement}");
+                }
+            }
             [HarmonyPrefix, HarmonyPatch(nameof(ZoneSystem.GenerateLocations), typeof(ZoneSystem.ZoneLocation))]
             private static bool GenerateLocationsPrefix(ZoneSystem __instance, ZoneSystem.ZoneLocation location)
             {
@@ -1087,6 +1426,7 @@ namespace BetterContinents
                     AccessTools.Field(typeof(Console), "m_cheat").SetValue(Console.instance, true);
                     Minimap.instance.ExploreAll();
                     Player.m_debugMode = true;
+                    Player.m_localPlayer.SetGodMode(true);
                 }
             }
         }
@@ -1158,6 +1498,10 @@ namespace BetterContinents
                         __instance.Print("Better Continents: bc show (filter) - add locations matching optional filter to the map");
                         __instance.Print("Better Continents: bc bosses");
                         __instance.Print("Better Continents: bc hide (filter) - add locations matching optional filter to the map");
+                    }
+                    if (text == "bc reload hm" || text == "bc reload all")
+                    {
+                        Settings.ReloadHeightmap();
                     }
 
                     Dictionary<Vector2i, ZoneSystem.LocationInstance> GetLocationInstances() =>
