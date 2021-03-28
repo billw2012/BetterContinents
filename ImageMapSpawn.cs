@@ -1,7 +1,11 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Linq;
+using SixLabors.ImageSharp;
+using SixLabors.ImageSharp.PixelFormats;
 using UnityEngine;
+using Color = UnityEngine.Color;
 
 namespace BetterContinents
 {
@@ -152,16 +156,30 @@ namespace BetterContinents
             new ColorSpawn(new Color32(0x78, 0x3F, 0x04, 0xFF), "WoodVillage1"),
         };
 
-        protected override bool LoadTextureToMap(Texture2D tex)
+        protected override bool LoadTextureToMap(Image image)
         {
+            var sw = new Stopwatch();
+            sw.Start();
+            
             int Index(int x, int y) => y * Size + x;
                 
-            var pixels = tex.GetPixels();
+            var typedImage = (Image<Rgba32>) image;
+            var pixels = new Color32[image.Width * image.Height];
+            for (int y = 0; y < typedImage.Height; y++)
+            {
+                var pixelRowSpan = typedImage.GetPixelRowSpan(y);
+                for (int x = 0; x < typedImage.Width; x++)
+                {
+                    pixels[y * typedImage.Width + x] = Convert(pixelRowSpan[x]);
+                }
+            }
+            
+            bool Compare(Color32 a, Color32 b) => a.r == b.r && a.g == b.g && a.b == b.b;
 
             void FloodFill(int x, int y, Action<int, int> fillfn)
             {
                 var sourceColor = pixels[Index(x, y)];
-                bool CheckValidity(int xc, int yc) => xc >= 0 && xc < Size && yc >= 0 && yc < Size && pixels[Index(xc, yc)] == sourceColor;
+                bool CheckValidity(int xc, int yc) => xc >= 0 && xc < Size && yc >= 0 && yc < Size && Compare(pixels[Index(xc, yc)], sourceColor);
 
                 var q = new Queue<Vector2i> (Size * Size);
 
@@ -195,14 +213,14 @@ namespace BetterContinents
                     EnqueueIfValid(x1 + 0, y1 - 1);
                 }
             }
-            
+
             // Determine the spawn positions by color first
-            var colorSpawns = new Dictionary<Color, List<Vector2>>();
+            var colorSpawns = new Dictionary<Color32, List<Vector2>>(new Color32Comparer());
             for (int y = 0; y < Size; y++)
             {
                 for (int x = 0; x < Size; ++x)
                 {
-                    int i = y * Size + x;
+                    int i = Index(x, y);
                     var color = pixels[i];
                     if (color != Color.black)
                     {
@@ -229,7 +247,7 @@ namespace BetterContinents
             RemainingSpawnAreas = new Dictionary<string, List<Vector2>>();
             foreach (var colorPositions in colorSpawns)
             {
-                var spawns = SpawnColorMapping.Where(d => d.color == colorPositions.Key).ToList();
+                var spawns = SpawnColorMapping.Where(d => Compare(d.color, colorPositions.Key)).ToList();
                 if (spawns.Count > 0)
                 {
                     foreach (var position in colorPositions.Value)
@@ -250,6 +268,8 @@ namespace BetterContinents
                     BetterContinents.Log((string) $"No spawns are mapped to color #{ColorUtility.ToHtmlStringRGB(colorPositions.Key)} (which has {colorPositions.Value.Count} spawn positions defined)");
                 }
             }
+
+            BetterContinents.Log($"Time to calculate spawns from {FilePath}: {sw.ElapsedMilliseconds} ms");
 
             return true;
         }

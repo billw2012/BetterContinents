@@ -1,8 +1,12 @@
-﻿using System.Collections.Generic;
+﻿using System;
+using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
 using System.Threading.Tasks;
+using SixLabors.ImageSharp;
+using SixLabors.ImageSharp.PixelFormats;
 using UnityEngine;
+using Color = UnityEngine.Color;
 using Debug = UnityEngine.Debug;
 
 namespace BetterContinents
@@ -52,30 +56,36 @@ namespace BetterContinents
             new ColorBiome(new Color32(255, 0, 0, 255), Heightmap.Biome.AshLands),
         };
 
-        protected override bool LoadTextureToMap(Texture2D tex)
-        {
-            float ColorDistance(Color a, Color b) => 
-                Vector3.Distance(new Vector3(a.r, a.g, a.b), new Vector3(b.r, b.g, b.b));
 
-            var pixels = tex.GetPixels();
-            
-            Map = new Heightmap.Biome[pixels.Length];
+        protected override bool LoadTextureToMap(Image image)
+        {
+            int ColorDistance(Color32 a, Color32 b) =>
+                (a.r - b.r) * (a.r - b.r) + (a.g - b.g) * (a.g - b.g) + (a.b - b.b) * (a.b - b.b);
+
+            var typedImage = (Image<Rgba32>) image;
+
+            Map = new Heightmap.Biome[typedImage.Width * typedImage.Height];
             
             var st = new Stopwatch();
             st.Start();
-            
-            var colorMapping = new Dictionary<Color, Heightmap.Biome>();
-            for (int i = 0; i < pixels.Length; i++)
+
+            var colorMapping = new Dictionary<Color32, Heightmap.Biome>(new Color32Comparer());
+            for (int y = 0; y < typedImage.Height; y++)
             {
-                if (!colorMapping.TryGetValue(pixels[i], out var biome))
+                var pixelRowSpan = typedImage.GetPixelRowSpan(y);
+                for (int x = 0; x < typedImage.Width; x++)
                 {
-                    biome = BiomeColorMapping.OrderBy(d => ColorDistance(pixels[i], d.color)).First().biome;
-                    colorMapping.Add(pixels[i], biome);
+                    var color = Convert(pixelRowSpan[x]);
+                    if (!colorMapping.TryGetValue(color, out var biome))
+                    {
+                        biome = BiomeColorMapping.OrderBy(d => ColorDistance(color, d.color)).First().biome;
+                        colorMapping.Add(color, biome);
+                    }
+                    Map[y * typedImage.Width + x] = biome;
                 }
-                Map[i] = biome;
             }
             
-            BetterContinents.Log($"Time to calculate biomes: {st.ElapsedMilliseconds} ms");
+            BetterContinents.Log($"Time to calculate biomes from {FilePath}: {st.ElapsedMilliseconds} ms");
             return true;
         }
 

@@ -23,13 +23,37 @@ This mod provides the tools to both improve the standard heightmap generation of
 [/list]
 
 [b][size=5]Usage[/size][/b]
-1. Install the mod and run the game.
-2. If you have configuration editor installed (if you use Vortex it installed automatically I believe):
+1. Install the mod and run the game (see below for Installation Guide).
+2. If you have [url=https://github.com/BepInEx/BepInEx.ConfigurationManager/releases]BepInEx Configuration Manager[/url] installed (if you use Vortex it installed automatically):
    a. Press F1 to open it 
    b. Find the Better Continents section and expand it
    c. Edit the parameters here:
       i. You can paste in the full path to the heightmap you want to use, there is no file browser
 3. If you don't have the configuration editor then you should quit the game again and find the newly generated config file in the BepinEx/config directory.
+
+[b][size=5]Installation Guide[/size][/b]
+[b][size=4]Client[/size][/b]
+Ideally use Vortex to install, as it includes all the dependencies you need for this mod already.
+Otherwise do this:
+0. Backup your world saves. Do it. Do it now! Backup your characters to while you are at it.
+1. Install BepInEx Valheim as per the Requirements section (see their [url=https://valheim.thunderstore.io/package/denikson/BepInExPack_Valheim/]documentation[/url] on how to do this)
+2. Optionally (but highly recommended) install the BepInEx Configuration Manager from [url=https://github.com/BepInEx/BepInEx.ConfigurationManager/releases]here[/url]
+3. Install this mod: place the [font=Courier New]BetterContinents.dll[/font] in the [font=Courier New]BepInEx\plugins[/font] directory.
+
+[b][size=4]Server[/size][/b]
+0. Stop your server.
+1. Backup your world saves on from server. Do it. Do it now! How you access them depends on your provider, probably FTP. Download them locally and put them somewhere safe. Each world should have a .fwl and .db file, and the default world is called "Dedicated".
+2. Enable mods on your server if they are not enabled already. How to do this is highly dependent on your server provider: for instance some provide a toggle on the server management page to "enable mods", which results in BepInEx (or a mod that comes with BepInEx, e.g. Valheim+) being installed and enabled for you. Alternatively you might need to set this up yourself, in which case you should follow [url=https://valheim.thunderstore.io/package/denikson/BepInExPack_Valheim/]BepInEx server installation guide[/url].
+3. Upload this mod to the [font=Courier New]BepInEx\plugins[/font] directory on your server. Again this depends on your server provider, but probably you will do it by FTP. The [font=Courier New]BetterContinents.dll[/font] file should now reside in the [font=Courier New]BepInEx\plugins[/font] directory.
+4. Upload some world you want to use that was created with Better Continents, perhaps one from [url=https://www.nexusmods.com/valheim/mods/categories/13/]here[/url], or one you created your self. Its possible to create a new world ON the server, but it is easier to do it locally as you can modify the configuration in game and test it first.
+5. Point your server at the world you uploaded. How to do it depends on your server provider, there should be some mechanism to specify the World Name, or modify the command line of the server.
+6. Start your server again and join it.
+
+You need to follow the Client setup guide above as well.
+Bear in mind, if enabling mods on your server required installing some other mod, e.g. Valheim+, then you will need to also install that on your client!
+Both client and server need the same version of Better Continents installed when running a Better Continents world.
+However: you can join servers that don't have Better Continents installed, and it will fall back to vanilla behaviour locally.
+You can also join servers with Better Continents installed, without having it installed yourself, *as long as the server runs a world that doesn't require it* (i.e. one created without it, or with it disabled).
 
 [b][size=5]Authoring Guide[/size][/b]
 Check out [url=https://www.nexusmods.com/valheim/mods/616]my example map[/url] which includes the source Photoshop file as a separate download.
@@ -40,7 +64,7 @@ Check out [url=https://www.youtube.com/watch?v=MzO_cl_mTLA]this other video[/url
 I would recommend using Photoshop or [url=https://krita.org/en/download/krita-desktop/]Krita[/url] for authoring, NOT GIMP, as GIMP does not support [url=https://helpx.adobe.com/uk/photoshop/using/nondestructive-editing.html]non-destructive editing[/url] via layer effects.
 Krita is open source, and has a mostly identical layer effects system to Photoshop.
 If you have a tablet then it can help a lot in painting smoothly and organically.
-You could use [url=https://www.world-machine.com/]World Machine[/url] to either generate a new heightmap, or modify an existing one. The erosion effect alone can help you make the terrain a lot more realistic, and be a guide on river placement. You could also generate biomemaps using it, but I won't be going into that here (it is a complex subject and I have not investigated it in any depth).
+You could use [url=https://www.world-machine.com/]World Machine[/url] or [url=https://quadspinner.com/]Gaea[/url] to either generate a new heightmap, or modify an existing one. The erosion effects alone can help you make the terrain a lot more realistic, and be a guide on river placement. You could also generate biomemaps using it, but I won't be going into that here (it is a complex subject and I have not investigated it in any depth).
 
 [b][size=4]Template[/size][/b]
 I recommend you use my [url=https://www.nexusmods.com/valheim/mods/446?tab=files]template file[/url] as a starting point.
@@ -53,8 +77,7 @@ The intended usage of the groups\layers is like so:
 [*][b]Reference:[/b] this contains reference images. Its often useful to drop in the source map you are trying to recreate, then set it as semi-transparent so you can paint over/under it. For my Middle Earth map I also dropped in a reference image that showed the route followed by Frodo/Bilbo so I could mark it with waymarkers in the spawnmap.
 [*][b]Reference\Biome Key:[/b] this is just a reference for the biome colors, you don't need it really as the layers are already set up.
 [*][b]Reference\Spawn Table:[/b] this is the key for how colors map to what is spawned. Where the same color maps to multiple things which one is 
-used will be randomly selected on world creation. I did this to simplify the spawnmap creation process, and make it easier to read visually. If there are some in there that should not be grouped then please raise in the comments.
-[*][b]Spawn:[/b] this is your primary spawnmap layer. I suggest you put the main spawns in here (starting point, bosses, trader), and then add extra layers for things of which there are many. e.g. a layer for buildings, one for waymarkers, etc. I suggest you paint them in using 3 radius pencil (or bigger if you want more randomness). Ensure the spawn areas don't touch each other.
+used will be randomly selected on world creation. I did this to simplify the spawnmap creation process, and make it easier to read visually. If there are some in there that should not be grouped then please raise in the comments.[*][b]Spawn:[/b] this is your primary spawnmap layer. I suggest you put the main spawns in here (starting point, bosses, trader), and then add extra layers for things of which there are many. e.g. a layer for buildings, one for waymarkers, etc. I suggest you paint them in using 3 radius pencil (or bigger if you want more randomness). Ensure the spawn areas don't touch each other.
 [*][b]Source:[/b] this is a place for your source images. You should put them in here to start with, and never modify them, rather copy them when you need to. Its always useful to be able to reference the unmodified source directly.
 [/list]
 

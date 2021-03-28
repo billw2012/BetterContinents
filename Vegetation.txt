@@ -1,0 +1,100 @@
+﻿Paste this into google sheets:
+
+Name	Prefab	BiomeArea	Biome	In forest	Forest Min	Forest Max	Force Place
+bog iron	Pickable_BogIronOre	6	Swamp	FALSE	0	1	FALSE
+branch deep forest	HeathRockPillar	7	Plains	FALSE	0	1.1	FALSE
+branch deep forest	rock2_heath	7	Plains	FALSE	0	1.1	FALSE
+branch deep forest	HugeStone1	7	Plains	FALSE	0	1.1	FALSE
+branch deep forest	rockformation1	7	Plains	FALSE	0	1.1	FALSE
+branch deep forest	rock_a	7	Plains	FALSE	0	1.1	FALSE
+dandelion	Pickable_Dandelion	7	Meadows	FALSE	1.1	5	FALSE
+firtree	FirTree	7	BlackForest	FALSE	0	1.1	FALSE
+firtree	FirTree	Edge	BlackForest	FALSE	0	1.1	FALSE
+firtree	FirTree	7	Mountain	FALSE	0	1.15	FALSE
+flint	MineRock_Tin	7	BlackForest	FALSE	0	1	FALSE
+flint	Pickable_Flint	7	Meadows	FALSE	0	1	FALSE
+flint	Pickable_Tin	7	BlackForest	FALSE	0	1	FALSE
+Pinetree 01	Pinetree_01	6	BlackForest	FALSE	0	1	FALSE
+Pinetree 01	Pinetree_01	6	Mistlands	FALSE	0	1	FALSE
+rock 3	Rock_3	7	Meadows Mountain	FALSE	0	1	FALSE
+rock 3	Rock_3	7	BlackForest	FALSE	0	1	FALSE
+rock 3	Rock_3	7	Mistlands	FALSE	0	1	FALSE
+rock 4	rock4_coast	7	873	FALSE	0	1	FALSE
+rock 4	rock4_heath	7	Plains	FALSE	0	1	FALSE
+rock 4	rock3_mountain	6	Mountain	FALSE	0	1	FALSE
+rock 4	rock3_silver	6	Mountain	FALSE	0	1	FALSE
+rock 4	silvervein	6	Mountain	FALSE	0	1	TRUE
+rock 4	rock1_mountain	6	Mountain	FALSE	0	1	FALSE
+rock 4	rock2_mountain	6	Mountain	FALSE	0	1	FALSE
+rock 4	Rock_4	7	Swamp	FALSE	0	1	FALSE
+rock 4	mudpile_beacon	7	Swamp	FALSE	0	1	FALSE
+rock 4	Rock_4	7	Meadows Mountain	FALSE	0	1	FALSE
+rock 4	Rock_4_plains	7	Plains	FALSE	0	1	FALSE
+rock 4	rock4_forest	7	BlackForest	FALSE	0	1	FALSE
+rock 4	rock4_copper	7	BlackForest	FALSE	0	1	FALSE
+rock 4	Rock_4	7	BlackForest	FALSE	0	1	FALSE
+rock 4	Rock_4	7	Mistlands	FALSE	0	1	FALSE
+rock 4	Skull1	7	Mistlands	FALSE	0	1	FALSE
+rock 4	Skull2	7	Mistlands	FALSE	0	1	FALSE
+shrub2	shrub_2_heath	7	Swamp	FALSE	1	1.15	FALSE
+shrub2	Pickable_Thistle	Median	10	FALSE	1	1.15	FALSE
+shrub2	shrub_2	7	BlackForest	FALSE	1	1.1	FALSE
+shrub2	BlueberryBush	7	BlackForest	FALSE	1	1.1	FALSE
+small fir	HugeRoot1	7	Mistlands	FALSE	0	1	FALSE
+small fir	SwampTree2_darkland	7	Mistlands	FALSE	0	1	FALSE
+small fir	Bush02_en	7	Plains	FALSE	0	1	FALSE
+small fir	CloudberryBush	7	Plains	FALSE	0	1	FALSE
+small fir	FirTree_small_dead	7	Swamp	FALSE	1.1	1.2	FALSE
+small fir	SwampTree1	7	Swamp	FALSE	0	1	FALSE
+small fir	SwampTree2	7	Swamp	FALSE	0	1	FALSE
+small fir	SwampTree2_log	7	Swamp	FALSE	0	1	FALSE
+small fir	Flies	7	Swamp	FALSE	0	1	FALSE
+small fir	FirTree_small	7	BlackForest	FALSE	1.05	1.15	FALSE
+small fir	FirTree_small	7	Mountain	FALSE	1.05	1.15	FALSE
+small fir	FirTree_small_dead	7	Mistlands	FALSE	1.05	1.15	FALSE
+small fir	vertical_web	7	Mistlands	FALSE	1.05	1.15	FALSE
+small fir	horizontal_web	7	Mistlands	FALSE	1.05	1.15	FALSE
+small fir	tunnel_web	7	Mistlands	FALSE	1.05	1.15	FALSE
+small fir	FirTree_small	Edge	BlackForest	FALSE	1.05	1.15	FALSE
+small fir	FirTree_oldLog	7	BlackForest	FALSE	1.05	1.15	FALSE
+stone	Pickable_Stone	7	27	FALSE	0	1	FALSE
+stone	Pickable_Stone	7	3	FALSE	0	1	FALSE
+stubbe	stubbe	7	Meadows	FALSE	0	1	FALSE
+stubbe	stubbe	7	Swamp	FALSE	0	1	FALSE
+stubbe	StatueEvil	7	Swamp	FALSE	0	1	FALSE
+stubbe	FirTree_oldLog	7	Meadows	FALSE	0	1	FALSE
+stubbe	FirTree_oldLog	7	Swamp	FALSE	0	1	FALSE
+stubbe	stubbe	7	BlackForest	FALSE	0	1	FALSE
+stubbe	stubbe	7	Mistlands	FALSE	0	1	FALSE
+swamp_mist	vfx_swamp_mist	7	Swamp	FALSE	0	1.1	FALSE
+swamp_mist	Crow	7	Swamp	FALSE	0	1.1	FALSE
+swamp_mist	vfx_ocean_clouds	7	384	FALSE	0	1.1	FALSE
+swamp_mist	vfx_edge_clouds	7	128	FALSE	0	1.1	FALSE
+veg	ice_rock1	7	DeepNorth	FALSE	0	1	FALSE
+veg	GlowingMushroom	7	Mistlands	FALSE	0	1	FALSE
+veg	MineRock_Obsidian	Everything	Mountain	FALSE	0	1	FALSE
+veg	Pickable_SeedTurnip	Everything	Swamp	FALSE	0	1	FALSE
+veg	Pickable_SeedCarrot	Everything	BlackForest	FALSE	0	1	FALSE
+veg	Pickable_Barley	Everything	Plains	FALSE	0	1	FALSE
+veg	Leviathan	Median	Ocean	FALSE	0	1	FALSE
+branch	Pickable_Branch	7	11	TRUE	0	1.1	FALSE
+bush01	Bush01	7	Meadows	TRUE	1	1.15	FALSE
+bush01	Bush01_heath	7	Plains	TRUE	1	1.15	FALSE
+firtree	Beech1	7	Meadows	TRUE	0	1.15	FALSE
+firtree	Birch1	7	Meadows	TRUE	0	1.15	FALSE
+firtree	Birch1_aut	7	Plains	TRUE	0	0.8	FALSE
+firtree	Birch2	7	Meadows	TRUE	0	1.15	FALSE
+firtree	Oak1	7	Meadows	TRUE	1	3	FALSE
+firtree	Birch2_aut	7	Plains	TRUE	0	0.8	FALSE
+mushroom	Pickable_Mushroom	7	11	TRUE	0	1	FALSE
+oak	acacitree	7	None	TRUE	0	1.1	FALSE
+ormbunke	ormbunke_green_medium	7	Meadows	TRUE	0	0.9	FALSE
+runestone	Waystone	7	17	TRUE	1.1	4	FALSE
+shrub2	shrub_2	7	Meadows	TRUE	1	1.15	FALSE
+shrub2	shrub_2_heath	7	Plains	TRUE	1	1.15	FALSE
+shrub2	RaspberryBush	7	Meadows	TRUE	1	1.2	FALSE
+small fir	Beech_small1	7	Meadows	TRUE	1.1	1.15	FALSE
+small fir	Beech_small2	7	Meadows	TRUE	1.1	1.15	FALSE
+small fir	Beech_small1	7	Meadows	TRUE	0	1	FALSE
+small fir	Beech_small2	7	Meadows	TRUE	0	1	FALSE
+veg	ice1	7	DeepNorth	TRUE	0	1	FALSE

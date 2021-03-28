@@ -1,6 +1,11 @@
 ﻿using System;
+using System.Diagnostics;
 using System.IO;
+using SixLabors.ImageSharp;
+using SixLabors.ImageSharp.PixelFormats;
+using SixLabors.ImageSharp.Processing;
 using UnityEngine;
+using Debug = UnityEngine.Debug;
 using Object = UnityEngine.Object;
 
 namespace BetterContinents
@@ -40,53 +45,67 @@ namespace BetterContinents
             }
         }
 
+        protected static Color32 Convert(Rgba32 rgba) => new Color32(rgba.R, rgba.G, rgba.B, rgba.A);
+        
+        protected virtual Image LoadImage(byte[] data) => Image.Load<Rgba32>(Configuration.Default, SourceData);
+
+        protected abstract bool LoadTextureToMap(Image image);
+
         public bool CreateMap()
         {
-            var tex = new Texture2D(2, 2);
             try
             {
-                try
-                {
-                    tex.LoadImage(SourceData);
-                }
-                catch (Exception ex)
-                {
-                    BetterContinents.LogError($"Cannot load texture {FilePath}: {ex.Message}");
-                    return false;
-                }
-
-                if (tex.width != tex.height)
-                {
-                    BetterContinents.LogError(
-                        $"Cannot use texture {FilePath}: its width ({tex.width}) does not match its height ({tex.height})");
-                    return false;
-                }
-
-                bool IsPowerOfTwo(int x) => (x & (x - 1)) == 0;
-                if (!IsPowerOfTwo(tex.width))
-                {
-                    BetterContinents.LogError(
-                        $"Cannot use texture {FilePath}: it is not a power of two size (e.g. 256, 512, 1024, 2048)");
-                    return false;
-                }
-
-                if (tex.width > 4096)
-                {
-                    BetterContinents.LogError(
-                        $"Cannot use texture {FilePath}: it is too big ({tex.width}x{tex.height}), keep the size to less or equal to 4096x4096");
-                    return false;
-                }
+                var sw = new Stopwatch();
+                sw.Start();
                 
-                Size = tex.width;
+                // Cast disambiguates to the correct return type for some reason
+                using(var image = LoadImage(SourceData))
+                {
+                    if (!ValidateDimensions(image.Width, image.Height))
+                    {
+                        return false;
+                    }
+                    Size = image.Width;
 
-                return this.LoadTextureToMap(tex);
+                    image.Mutate(x => x.Flip(FlipMode.Vertical));
+
+                    BetterContinents.Log($"Time to load {FilePath}: {sw.ElapsedMilliseconds} ms");
+                    
+                    return this.LoadTextureToMap(image);
+                }
             }
-            finally
+            catch (Exception ex)
             {
-                Object.Destroy(tex);
+                BetterContinents.LogError($"Cannot load texture {FilePath}: {ex.Message}");
+                return false;
             }
         }
 
-        protected abstract bool LoadTextureToMap(Texture2D tex);
+        protected bool ValidateDimensions(int width, int height)
+        {
+            if (width != height)
+            {
+                BetterContinents.LogError(
+                    $"Cannot use texture {FilePath}: its width ({width}) does not match its height ({height})");
+                return false;
+            }
+
+            bool IsPowerOfTwo(int x) => (x & (x - 1)) == 0;
+            if (!IsPowerOfTwo(width))
+            {
+                BetterContinents.LogError(
+                    $"Cannot use texture {FilePath}: it is not a power of two size (e.g. 256, 512, 1024, 2048)");
+                return false;
+            }
+
+            if (width > 4096)
+            {
+                BetterContinents.LogError(
+                    $"Cannot use texture {FilePath}: it is too big ({width}x{height}), keep the size to less or equal to 4096x4096");
+                return false;
+            }
+
+            return true;
+        }
     }
 }
