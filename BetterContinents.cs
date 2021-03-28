@@ -703,7 +703,6 @@ namespace BetterContinents
                     float calculatedValue = Mathf.Lerp(normalizedForestValue, normalizedForestValue * fmap, ForestmapMultiply) + fmap * ForestmapAdd;
                     // Map back to weird values
                     finalValue = Mathf.Lerp(1.850145f, 0.145071f, calculatedValue);
-                    // Log($"Forest: {forest}, {normalizedForestValue}, {fmap} => {finalValue}");
                 }
 
                 // Clamp between the known good values (that vanilla generates)
@@ -1012,7 +1011,6 @@ namespace BetterContinents
                         LogError($"{LastConnectionError}: packet hash mismatch, got {hash}, expected {packetHash}");
                         
                         m_connectionStatus.SetValue(null, ZNet.ConnectionStatus.ErrorConnectFailed);
-                        // ZNet.m_connectionStatus = ZNet.ConnectionStatus.ErrorConnectFailed;
                         ZNet.instance.Disconnect(peer);
                         return;
                     }
@@ -1038,7 +1036,6 @@ namespace BetterContinents
                                 LastConnectionError = $"Server world has Better Continents enabled, but server mod {ServerVersion} and client mod {ModInfo.Version} don't match";
                                 LogError(LastConnectionError);
                                 m_connectionStatus.SetValue(null, ZNet.ConnectionStatus.ErrorConnectFailed);
-                                //ZNet.m_connectionStatus = ZNet.ConnectionStatus.ErrorConnectFailed;
                                 ZNet.instance.Disconnect(peer);
                             }
                             else if (!Settings.EnabledForThisWorld)
@@ -1050,7 +1047,6 @@ namespace BetterContinents
                         {
                             LogError($"{LastConnectionError}: hash mismatch, got {finalHash}, expected {SettingsReceiveHash}");
                             m_connectionStatus.SetValue(null, ZNet.ConnectionStatus.ErrorConnectFailed);
-                            //ZNet.m_connectionStatus = ZNet.ConnectionStatus.ErrorConnectFailed;
                             ZNet.instance.Disconnect(peer);
                         }
                     }
@@ -1592,38 +1588,6 @@ namespace BetterContinents
 
                 return true;
             }
-            
-            // private Color GetMaskColor(float wx, float wy, float height, Heightmap.Biome biome)
-            // {
-            //     if (height < ZoneSystem.instance.m_waterLevel)
-            //     {
-            //         return this.noForest;
-            //     }
-            //     if (biome == Heightmap.Biome.Meadows)
-            //     {
-            //         if (!WorldGenerator.InForest(new Vector3(wx, 0f, wy)))
-            //         {
-            //             return this.noForest;
-            //         }
-            //         return this.forest;
-            //     }
-            //     else if (biome == Heightmap.Biome.Plains)
-            //     {
-            //         if (WorldGenerator.GetForestFactor(new Vector3(wx, 0f, wy)) >= 0.8f)
-            //         {
-            //             return this.noForest;
-            //         }
-            //         return this.forest;
-            //     }
-            //     else
-            //     {
-            //         if (biome == Heightmap.Biome.BlackForest || biome == Heightmap.Biome.Mistlands)
-            //         {
-            //             return this.forest;
-            //         }
-            //         return this.noForest;
-            //     }
-            // }
         }
         
         // Debug mode helpers
@@ -1643,9 +1607,9 @@ namespace BetterContinents
                     {
                         // __instance.Print("Better Continents: bc reload (hm/bm/sm) - reload a specific image from the source file, or all of them");
                         __instance.Print("Better Continents: bc dump - dump all location instance counts to the log/console");
-                        __instance.Print("Better Continents: bc show (filter) - add locations matching optional filter to the map");
-                        __instance.Print("Better Continents: bc bosses");
-                        __instance.Print("Better Continents: bc hide (filter) - add locations matching optional filter to the map");
+                        __instance.Print("Better Continents: bc show (filter) - pin locations matching optional filter oo the map");
+                        __instance.Print("Better Continents: bc hide (filter) - odd locations matching optional filter oo the map");
+                        __instance.Print("Better Continents: bc bosses - toggle pins for bosses");
                         __instance.Print("Better Continents: bc clouds - toggle the map clouds");
                     }
                     if (text == "bc reload hm" || text == "bc reload all")

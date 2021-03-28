@@ -9,16 +9,17 @@ This mod provides the tools to both improve the standard heightmap generation of
 [b][size=5]Features[/size][/b]
 [list]
 [*]Change global scale -- changes continent sizes
-[*]Use image files as base heightmap layer, with blending options
+[*]Use image files as base heightmap layer, detail heightmap layer, and biome specific heightmap layer, with blending options
 [*]Use image file to specify biomes
 [*]Use image file to specify spawning positions for locations, including player start, bosses, and trader
+[*]Use image file to specify forest coverage, including in biomes that normally are totally forested (Swamp, Mistlands, Dark Forest, Mountains)
 [*]Adjust mountains amount
 [*]Adjust sea level
 [*]Adjust forest scaling (how big the contiguous areas of forest/clearings are), and amount
 [*]Specify starting position explicitly
 [*]Additional customizable ridged heightmap layer gives more varied geography
 [*]Still allows worlds that were created before this mod was installed to be loaded
-[*]Includes a debug mode to automatically enable cheats, reveal the full map, and toggle on vanilla debugmode, for quicker testing
+[*]Includes a debug mode to automatically enable cheats, reveal the full map, toggle on vanilla debugmode, and various other things, for quicker testing
 [*]Allows skipping of default location placement for quicker testing (should not be done in final version of the world)
 [/list]
 
@@ -49,9 +50,7 @@ Otherwise do this:
 5. Point your server at the world you uploaded. How to do it depends on your server provider, there should be some mechanism to specify the World Name, or modify the command line of the server.
 6. Start your server again and join it.
 
-You need to follow the Client setup guide above as well.
-Bear in mind, if enabling mods on your server required installing some other mod, e.g. Valheim+, then you will need to also install that on your client!
-Both client and server need the same version of Better Continents installed when running a Better Continents world.
+You need to follow the Client setup guide above as well: both client and server need the same version of Better Continents installed when running a Better Continents world.
 However: you can join servers that don't have Better Continents installed, and it will fall back to vanilla behaviour locally.
 You can also join servers with Better Continents installed, without having it installed yourself, *as long as the server runs a world that doesn't require it* (i.e. one created without it, or with it disabled).
 
@@ -110,6 +109,24 @@ RidgeBlend 0%
 RidgeAmount 0%
 [/code][/list]
 
+
+[b][size=4]Roughmap[/size][/b]
+The roughmap controls the vanilla biome-specific height variations. In vanilla each biome has its own additional height variation that is applied, for instance the swamp height is always set to about sea-level, mountains have extra large scale variation applied to generate peaks. A white value in the roughmap will result in the vanilla biome variations being unmodified. A black value will result in them being removed entirely. 
+
+[b][size=3]Requirements[/size][/b]
+[list]
+[*]The size and format constraints are the same as the heightmap, however it doesn't need to be the exact same values/format as the heightmap you use. You can use a 4096x4096 HDR heightmap with a 64x64 png roughmap for instance.
+[/list]
+
+[b][size=4]Flatmap[/size][/b]
+The flatmap controls the smaller detail bumpiness that is applied ontop of the large scale height changes in the base height calculation. A black value in the flatmap will result in the vanilla small height variations being unmodified. A white value will result in them being removed entirely.
+As the roughmap and flatmap have similar but inverted behavior (they both serve to control small scale variations in height), you can use one of them to drive the other with the "Use Rough For Flat" flag in the config. This will use the roughmap (inverted, so white is black and vice versa) as the flat map. The means if you paint all black in roughmap it will remove all extra procedural details (excluding the Ocean Channels and Rivers, which you can also toggle in the config).
+
+[b][size=3]Requirements[/size][/b]
+[list]
+[*]The size and format constraints are the same as the heightmap, however it doesn't need to be the exact same values/format as the heightmap you use. You can use a 4096x4096 HDR heightmap with a 64x64 png flatmap for instance.
+[/list]
+
 [b][size=4]Biomemap[/size][/b]
 [b][size=3]Requirements[/size][/b]
 [list]
@@ -164,7 +181,15 @@ This map allows you to explicitly specifiy the spawn positions of [i]location ty
 [*]Use a separate layer for each spawn type (bosses, markers, buildings etc.), then you can easily change the type of all of them in one go.
 [/list]
 
-Please join the discord linked above to share know how for creating these maps!
+
+[b][size=4]Forestmap[/size][/b]
+The forest map controls the spawning of trees. By default this will only affect the Meadows and Plains trees (as in vanilla). You can also set the "Forest Factor Overrides All Trees" to have forest factor (whether from vanilla procedural generation or the forestmap) control tree spawning in *all* biomes. i.e. You can have clearings in the Mistlands, the Swamps and even the Dark Forest! The minimap is also updated to show forest coverage on all biomes when this flag is active.
+
+[b][size=3]Requirements[/size][/b]
+[list]
+[*]The size and format constraints are the same as the heightmap, however it doesn't need to be the exact same values/format as the heightmap you use. You can use a 4096x4096 HDR heightmap with a 64x64 png forestmap for instance.
+[/list]
+
 
 [b][size=5]Notes[/size][/b]
 [b][size=4]When Settings are Applied[/size][/b]
