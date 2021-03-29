@@ -1406,8 +1406,11 @@ namespace BetterContinents
             }
 
             [HarmonyPrefix, HarmonyPatch(nameof(WorldGenerator.GetForestFactor))]
-            private static void GetForestFactorPrefix(ref Vector3 pos)
+            private static void GetForestFactorPrefix(ref Vector3 pos, ref object __state)
             {
+                // Save the pos before modifying it, for use in the postfix below (to save possible float accuracy
+                // weirdness if we were to attempt to reverse the scaling instead)
+                __state = pos;
                 if (Settings.EnabledForThisWorld && Settings.ForestScale != 1)
                 {
                     pos *= Settings.ForestScale;
@@ -1416,10 +1419,12 @@ namespace BetterContinents
 
             // Range: 0.145071 1.850145
             [HarmonyPostfix, HarmonyPatch(nameof(WorldGenerator.GetForestFactor))]
-            private static void GetForestFactorPostfix(Vector3 pos, ref float __result)
+            private static void GetForestFactorPostfix(object __state, ref float __result)
             {
                 if (Settings.EnabledForThisWorld)
                 {
+                    // We stored the original unmodified pos in the prefix above
+                    var pos = (Vector3) __state;
                     __result = Settings.ApplyForest(NormalizedX(pos.x), NormalizedY(pos.z), __result);
                 }
             }
@@ -1585,7 +1590,6 @@ namespace BetterContinents
                     __result = forestFactor < limit ? ___forest : ___noForest;
                     return false;
                 }
-
                 return true;
             }
         }
