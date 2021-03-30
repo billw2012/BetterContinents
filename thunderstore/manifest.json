@@ -1,0 +1,9 @@
+{
+    "name": "BetterContinents",
+    "version_number": "0.5.0",
+    "website_url": "https://github.com/billw2012/BetterContinents",
+    "description": "This mod provides the tools to both improve the standard heightmap generation of the game, and override aspects of it with hand crafted height and biome maps taken from images.",
+    "dependencies": [
+        "MythicManiac-TestMod-1.1.0"
+    ]
+}

@@ -112,7 +112,6 @@ RidgeAmount 0%
 
 [b][size=4]Roughmap[/size][/b]
 The roughmap controls the vanilla biome-specific height variations. In vanilla each biome has its own additional height variation that is applied, for instance the swamp height is always set to about sea-level, mountains have extra large scale variation applied to generate peaks. A white value in the roughmap will result in the vanilla biome variations being unmodified. A black value will result in them being removed entirely. 
-
 [b][size=3]Requirements[/size][/b]
 [list]
 [*]The size and format constraints are the same as the heightmap, however it doesn't need to be the exact same values/format as the heightmap you use. You can use a 4096x4096 HDR heightmap with a 64x64 png roughmap for instance.
@@ -121,7 +120,6 @@ The roughmap controls the vanilla biome-specific height variations. In vanilla e
 [b][size=4]Flatmap[/size][/b]
 The flatmap controls the smaller detail bumpiness that is applied ontop of the large scale height changes in the base height calculation. A black value in the flatmap will result in the vanilla small height variations being unmodified. A white value will result in them being removed entirely.
 As the roughmap and flatmap have similar but inverted behavior (they both serve to control small scale variations in height), you can use one of them to drive the other with the "Use Rough For Flat" flag in the config. This will use the roughmap (inverted, so white is black and vice versa) as the flat map. The means if you paint all black in roughmap it will remove all extra procedural details (excluding the Ocean Channels and Rivers, which you can also toggle in the config).
-
 [b][size=3]Requirements[/size][/b]
 [list]
 [*]The size and format constraints are the same as the heightmap, however it doesn't need to be the exact same values/format as the heightmap you use. You can use a 4096x4096 HDR heightmap with a 64x64 png flatmap for instance.
@@ -181,15 +179,12 @@ This map allows you to explicitly specifiy the spawn positions of [i]location ty
 [*]Use a separate layer for each spawn type (bosses, markers, buildings etc.), then you can easily change the type of all of them in one go.
 [/list]
 
-
 [b][size=4]Forestmap[/size][/b]
 The forest map controls the spawning of trees. By default this will only affect the Meadows and Plains trees (as in vanilla). You can also set the "Forest Factor Overrides All Trees" to have forest factor (whether from vanilla procedural generation or the forestmap) control tree spawning in *all* biomes. i.e. You can have clearings in the Mistlands, the Swamps and even the Dark Forest! The minimap is also updated to show forest coverage on all biomes when this flag is active.
-
 [b][size=3]Requirements[/size][/b]
 [list]
 [*]The size and format constraints are the same as the heightmap, however it doesn't need to be the exact same values/format as the heightmap you use. You can use a 4096x4096 HDR heightmap with a 64x64 png forestmap for instance.
 [/list]
-
 
 [b][size=5]Notes[/size][/b]
 [b][size=4]When Settings are Applied[/size][/b]
@@ -224,7 +219,7 @@ Once you generate a new map you can view the whole result like so (you might wan
 [list=1][*]Open the console with F5
 [*]Enter: 
 [code]imacheater
-exploremap[/code][*]The whole map will be revealed, however it takes a while for it to fully generate, about 2 minutes on my PC. [s]Once the clouds appear I believe that indicates it is done.[/s]
+exploremap[/code][*]The whole map will be revealed, however it takes a while for it to fully generate, about 2 minutes on my PC.
 [*]To rehide the map you can enter:
 [code]resetmap[/code][/list]
 

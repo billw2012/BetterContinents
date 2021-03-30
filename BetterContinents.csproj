@@ -36,8 +36,8 @@
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
   </PropertyGroup>
   <ItemGroup>
-    <Reference Include="0Harmony, Version=2.4.0.0, Culture=neutral, PublicKeyToken=null">
-      <HintPath>..\..\..\..\..\Program Files (x86)\Steam\steamapps\common\Valheim\BepInEx\core\0Harmony.dll</HintPath>
+    <Reference Include="0Harmony, Version=2.3.2.0, Culture=neutral, PublicKeyToken=null">
+      <HintPath>lib\BepInEx\core\0Harmony.dll</HintPath>
       <Private>False</Private>
     </Reference>
     <Reference Include="assembly_guiutils, Version=0.0.0.0, Culture=neutral, PublicKeyToken=null">
@@ -52,12 +52,12 @@
       <HintPath>..\..\..\..\..\Program Files (x86)\Steam\steamapps\common\Valheim\valheim_Data\Managed\assembly_valheim.dll</HintPath>
       <Private>False</Private>
     </Reference>
-    <Reference Include="BepInEx">
-      <HintPath>..\..\..\..\..\Program Files (x86)\Steam\steamapps\common\Valheim\BepInEx\core\BepInEx.dll</HintPath>
+    <Reference Include="BepInEx, Version=5.4.8.0, Culture=neutral, PublicKeyToken=null">
+      <HintPath>lib\BepInEx\core\BepInEx.dll</HintPath>
       <Private>False</Private>
     </Reference>
     <Reference Include="BepInEx.Harmony, Version=2.0.0.0, Culture=neutral, PublicKeyToken=null">
-      <HintPath>..\..\..\..\..\Program Files (x86)\Steam\steamapps\common\Valheim\BepInEx\core\BepInEx.Harmony.dll</HintPath>
+      <HintPath>lib\BepInEx\core\BepInEx.Harmony.dll</HintPath>
       <Private>False</Private>
     </Reference>
     <Reference Include="ILMerge, Version=1.16.0.0, Culture=neutral, PublicKeyToken=4d0e9a1cbec0d397">
@@ -69,7 +69,7 @@
       <Private>True</Private>
     </Reference>
     <Reference Include="MonoMod.Utils, Version=21.1.11.1, Culture=neutral, PublicKeyToken=null">
-      <HintPath>..\..\..\..\..\Program Files (x86)\Steam\steamapps\common\Valheim\BepInEx\core\MonoMod.Utils.dll</HintPath>
+      <HintPath>lib\BepInEx\core\MonoMod.Utils.dll</HintPath>
       <Private>False</Private>
     </Reference>
     <Reference Include="mscorlib" />
@@ -213,7 +213,13 @@
     </Reference>
   </ItemGroup>
   <ItemGroup>
+    <Compile Include="BetterContinents.BetterContinentsSettings.cs" />
+    <Compile Include="BetterContinents.ConsolePatch.cs" />
     <Compile Include="BetterContinents.cs" />
+    <Compile Include="BetterContinents.WorldGeneratorPatch.cs" />
+    <Compile Include="BetterContinents.WorldPatch.cs" />
+    <Compile Include="BetterContinents.ZNetPatch.cs" />
+    <Compile Include="BetterContinents.ZoneSystemPatch.cs" />
     <Compile Include="Color32Comparer.cs" />
     <Compile Include="ConfigHelpers.cs" />
     <Compile Include="ConfigurationManagerAttributes.cs" />
