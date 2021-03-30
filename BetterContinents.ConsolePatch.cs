@@ -13,7 +13,7 @@ namespace BetterContinents
         private class ConsolePatch
         {
             private static Texture CloudTexture;
-            private static Texture2D TransparentTexture;
+            private static Texture TransparentTexture;
 
             [HarmonyPrefix, HarmonyPatch("InputText")]
             private static void InputTextPrefix(Console __instance)
@@ -121,9 +121,7 @@ namespace BetterContinents
                             CloudTexture = mat.GetTexture("_CloudTex");
                             if (TransparentTexture == null)
                             {
-                                TransparentTexture = new Texture2D(1, 1);
-                                TransparentTexture.SetPixels32(new []{ new Color32(0, 0, 0, 0) });
-                                TransparentTexture.Apply(false);
+                                TransparentTexture = CreateFillTexture(new Color32(0, 0, 0, 0)); 
                             }
                             mat.SetTexture("_CloudTex", TransparentTexture);
                         }

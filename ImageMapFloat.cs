@@ -20,38 +20,39 @@ namespace BetterContinents
 
         public bool CreateMapLegacy()
         {
-            var tex = new Texture2D(2, 2);
             try
             {
+                var img = Image.Load<Rgba32>(Configuration.Default, SourceData);
+                img.Mutate(i => i.Flip(FlipMode.Vertical));
+
                 var sw = new Stopwatch();
                 sw.Start();
 
-                tex.LoadImage(SourceData);
                 // Cast disambiguates to the correct return type for some reason
-                if (!ValidateDimensions(tex.width, tex.height))
+                if (!ValidateDimensions(img.Width, img.Height))
                 {
                     return false;
                 }
-                Size = tex.width;
+                Size = img.Width;
 
                 BetterContinents.Log($"Time to load {FilePath}: {sw.ElapsedMilliseconds} ms");
 
-                var pixels = tex.GetPixels();
-                Map = new float[pixels.Length];
-                for (int i = 0; i < pixels.Length; i++)
+                Map = new float[img.Width * img.Height];
+                for (int y = 0; y < img.Height; y++)
                 {
-                    Map[i] = pixels[i].r;
+                    var pixelRowSpan = img.GetPixelRowSpan(y);
+                    for (int x = 0; x < img.Width; x++)
+                    {
+                        Map[y * img.Width + x] = pixelRowSpan[x].ToVector4().X; // / (float)ushort.MaxValue;
+                    }
                 }
+
                 return true;
             }
             catch (Exception ex)
             {
                 BetterContinents.LogError($"Cannot load texture {FilePath}: {ex.Message}");
                 return false;
-            }
-            finally
-            {
-                Object.Destroy(tex);
             }
         }
         

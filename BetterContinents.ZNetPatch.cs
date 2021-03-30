@@ -3,9 +3,12 @@ using System.Collections;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Reflection;
 using System.Text;
+using System.Threading.Tasks;
 using HarmonyLib;
 using UnityEngine;
+using UnityEngine.UI;
 
 namespace BetterContinents
 {
@@ -85,7 +88,7 @@ namespace BetterContinents
 
             private static class WorldCache
             {
-                private static string WorldCachePath => Path.Combine(Utils.GetSaveDataPath(), "BetterContinents", "cache");
+                private static readonly string WorldCachePath = Path.Combine(Utils.GetSaveDataPath(), "BetterContinents", "cache");
                 private static string GetCachePath(string id) => Path.Combine(WorldCachePath, id + ".bc");
                 
                 public static void Add(ZPackage package)
@@ -159,148 +162,256 @@ namespace BetterContinents
             {
                 public string version;
                 public ZPackage worldCache;
+                public bool readyForPeerInfo;
             }
             
-            private static Dictionary<long, BCClientInfo> ClientModVersions = new Dictionary<long, BCClientInfo>();
+            private static readonly Dictionary<long, BCClientInfo> ClientInfo = new Dictionary<long, BCClientInfo>();
+
+            private static readonly FieldInfo m_connectionStatus = AccessTools.Field(typeof(ZNet), "m_connectionStatus");
+
+            private static readonly Color ValheimColor = new Color(1, 0.714f, 0.361f, 1);
+            private static Texture BorderTexture;
+            private static Texture FrontTexture;
+            private static Texture BackTexture;
+            private static GUIStyle TextStyle;
+            
+            private static void CreateTextStyle()
+            {
+                if (TextStyle != null)
+                {
+                    return;
+                }
+
+                TextStyle = new GUIStyle(GUI.skin.label);
+                TextStyle.font = Resources.FindObjectsOfTypeAll(typeof(Text)).OfType<Text>()
+                    .Select(t => t.font)
+                    .FirstOrDefault(f => f.name == "AveriaSerifLibre-Bold") ?? TextStyle.font;
+                ;
+                TextStyle.normal.textColor = Color.Lerp(ValheimColor, Color.white, 0.75f);
+                // Trying to assign alignment crashes with method not found exception
+                // TextStyle.alignment = TextAnchor.MiddleCenter;
+                TextStyle.fontSize = 40;
+                TextStyle.fontStyle = FontStyle.Bold;
+            }
 
             // Register our RPC for receiving settings on clients
             [HarmonyPrefix, HarmonyPatch("OnNewConnection")]
-            private static void OnNewConnectionPrefix(ZNetPeer peer)
+            private static void OnNewConnectionPrefix(ZNet __instance, ZNetPeer peer)
             {
                 Log($"Registering settings RPC");
 
-                var m_connectionStatus = AccessTools.Field(typeof(ZNet), "m_connectionStatus");
-                
                 ServerVersion = "(old)";
 
                 if (ZNet.instance.IsServer())
                 {
-                    ClientModVersions.Remove(peer.m_uid);
+                    ClientInfo.Remove(peer.m_uid);
                     peer.m_rpc.Register("BetterContinentsServerHandshake", (ZRpc rpc, string clientVersion, ZPackage worldCache) =>
                     {
                         Log($"Receiving client {PeerName(peer)} version {clientVersion}");
                         // We check this when sending settings (if we have a BC world loaded, otherwise it doesn't matter)
-                        ClientModVersions[peer.m_uid] = new BCClientInfo { version = clientVersion, worldCache = worldCache };
+                        ClientInfo[peer.m_uid] = new BCClientInfo { version = clientVersion, worldCache = worldCache, readyForPeerInfo = false };
+                    });
+                    
+                    peer.m_rpc.Register("BetterContinentsReady", (ZRpc rpc, int stage) =>
+                    {
+                        Log($"Client is ready for PeerInfo");
+
+                        // We wait for this flag before continuing after sending the world settings, allowing the client to behave asynchronously on its end
+                        ClientInfo[peer.m_uid].readyForPeerInfo = true;
                     });
                 }
                 else
                 {
+                    // Only need these on the client
+                    BorderTexture = CreateFillTexture(Color.Lerp(ValheimColor, Color.white, 0.25f));
+                    FrontTexture = CreateFillTexture(Color.Lerp(ValheimColor, Color.black, 0.5f));
+                    BackTexture = CreateFillTexture(Color.Lerp(ValheimColor, Color.black, 0.85f));
+                    TextStyle = null; // We are "resetting" this in-case it got invalidated. We can only actually create it in a GUI function
+                    
                     peer.m_rpc.Invoke("BetterContinentsServerHandshake", ModInfo.Version, WorldCache.SerializeCacheList());
-                }
 
-                peer.m_rpc.Register("BetterContinentsVersion", (ZRpc rpc, string serverVersion) =>
-                {
-                    ServerVersion = serverVersion;
-                    Log($"Receiving server version {serverVersion}");
-                });
-
-                peer.m_rpc.Register("BetterContinentsConfigLoadFromCache", (ZRpc rpc, string id) =>
-                {
-                    Log($"Loading server world settings from local cache, id {id}");
-
-                    try
+                    peer.m_rpc.Register("BetterContinentsVersion", (ZRpc rpc, string serverVersion) =>
                     {
-                        var package = WorldCache.LoadCacheItem(id);
-                        
-                        // Recalculate the id again to confirm it really matches
-                        string localId = WorldCache.PackageID(package);
-                        if (id != localId)
+                        ServerVersion = serverVersion;
+                        Log($"Receiving server version {serverVersion}");
+                    });
+
+                    peer.m_rpc.Register("BetterContinentsConfigLoadFromCache", (ZRpc rpc, string id) =>
+                    {
+                        Log($"Loading server world settings from local cache, id {id}");
+
+                        __instance.StartCoroutine(LoadFromCache(peer, id));
+                    });
+                    
+                    peer.m_rpc.Register("BetterContinentsConfigStart", (ZRpc rpc, int totalBytes, int hash) =>
+                    {
+                        SettingsReceiveBuffer = new byte[totalBytes];
+                        SettingsReceiveHash = hash;
+                        SettingsReceiveBufferBytesReceived = 0;
+                        Log($"Receiving settings from server ({SettingsReceiveBuffer.Length} bytes)");
+
+                        BetterContinents.UICallbacks["ConfigDownload"] = () =>
                         {
-                            LastConnectionError = $"Better Continents: Hash of locally cached settings doesn't match servers hash, please reconnect to download them again!";
-                            LogError(LastConnectionError);
+                            CreateTextStyle();
+
+                            int percent = SettingsReceiveBufferBytesReceived * 100 / SettingsReceiveBuffer.Length;
+                            int yOffs = Screen.height - 75;
+                            GUI.DrawTexture(new Rect(50 - 4, yOffs - 4, Screen.width - 100 + 8, 50 + 8), BorderTexture, ScaleMode.StretchToFill);
+                            GUI.DrawTexture(new Rect(50, yOffs, Screen.width - 100, 50), BackTexture, ScaleMode.StretchToFill);
+                            GUI.DrawTexture(new Rect(50, yOffs, (Screen.width - 100) * percent / 100f, 50), FrontTexture, ScaleMode.StretchToFill);
+                            GUI.Label(new Rect(75, yOffs, Screen.width - 50, 50), $"Better Continents: downloading world settings from server ...", TextStyle);
+                        };
+                    });
+
+                    peer.m_rpc.Register("BetterContinentsConfigPacket", (ZRpc rpc, int offset, int packetHash, ZPackage packet) =>
+                    {
+                        var packetData = packet.GetArray();
+                        int hash = GetHashCode(packetData);
+                        if (hash != packetHash)
+                        {
+                            LastConnectionError = $"Better Continents: settings from server were corrupted during transfer, please reconnect!";
+                            LogError($"{LastConnectionError}: packet hash mismatch, got {hash}, expected {packetHash}");
+                            
                             m_connectionStatus.SetValue(null, ZNet.ConnectionStatus.ErrorConnectFailed);
                             ZNet.instance.Disconnect(peer);
-                            WorldCache.DeleteCacheItem(id);
                             return;
                         }
 
-                        Settings = BetterContinentsSettings.Load(package);
-                        Settings.Dump();
-
-                        // We only care about server/client version match when the server sends a world that actually uses the mod
-                        if (Settings.EnabledForThisWorld && ServerVersion != ModInfo.Version)
-                        {
-                            LastConnectionError = $"Better Continents: Server world has Better Continents enabled, but server mod {ServerVersion} and client mod {ModInfo.Version} don't match";
-                            LogError(LastConnectionError);
-                            m_connectionStatus.SetValue(null, ZNet.ConnectionStatus.ErrorConnectFailed);
-                            ZNet.instance.Disconnect(peer);
-                        }
-                        else if (!Settings.EnabledForThisWorld)
-                        {
-                            Log($"Server world does not have Better Continents enabled, skipping version check");
-                        }
-                    }
-                    catch (Exception ex)
-                    {
-                        LastConnectionError = $"Better Continents: Failed to load cached world settings, please reconnect to download them!";
-                        LogError($"Failed to load cached world settings: {ex.Message}");
-                        m_connectionStatus.SetValue(null, ZNet.ConnectionStatus.ErrorConnectFailed);
-                        ZNet.instance.Disconnect(peer);
-                        WorldCache.DeleteCacheItem(id);
-                    }
-                });
-                
-                peer.m_rpc.Register("BetterContinentsConfigStart", (ZRpc rpc, int totalBytes, int hash) =>
-                {
-                    SettingsReceiveBuffer = new byte[totalBytes];
-                    SettingsReceiveHash = hash;
-                    SettingsReceiveBufferBytesReceived = 0;
-                    Log($"Receiving settings from server ({SettingsReceiveBuffer.Length} bytes)");
-                });
-
-                peer.m_rpc.Register("BetterContinentsConfigPacket", (ZRpc rpc, int offset, int packetHash, ZPackage packet) =>
-                {
-                    var packetData = packet.GetArray();
-                    int hash = GetHashCode(packetData);
-                    if (hash != packetHash)
-                    {
-                        LastConnectionError = $"Better Continents settings from server were corrupted";
-                        LogError($"{LastConnectionError}: packet hash mismatch, got {hash}, expected {packetHash}");
+                        Buffer.BlockCopy(packetData, 0, SettingsReceiveBuffer, offset, packetData.Length);
                         
+                        SettingsReceiveBufferBytesReceived += packetData.Length;
+
+                        Log($"Received settings packet {packetData.Length} bytes at {offset}, {SettingsReceiveBufferBytesReceived} / {SettingsReceiveBuffer.Length} received");
+                        if (SettingsReceiveBufferBytesReceived == SettingsReceiveBuffer.Length)
+                        {
+                            BetterContinents.UICallbacks.Remove("ConfigDownload");
+                            __instance.StartCoroutine(ReceivedSettings(peer));
+                        }
+                    });
+                }
+            }
+
+            private static IEnumerator LoadFromCache(ZNetPeer peer, string id)
+            {
+                var loadTask = Task.Run<BetterContinentsSettings?>(() =>
+                {
+                    var package = WorldCache.LoadCacheItem(id);
+                    // Recalculate the id again to confirm it really matches
+                    string localId = WorldCache.PackageID(package);
+                    if (id != localId)
+                    {
+                        return null;
+                    }
+                    return BetterContinentsSettings.Load(package);
+                });
+
+                try
+                {
+                    BetterContinents.UICallbacks["LoadingFromCache"] = () => DisplayMessage($"Better Continents: initializing from cached config");
+                    yield return new WaitUntil(() => loadTask.IsCompleted);
+                }
+                finally
+                {
+                    BetterContinents.UICallbacks.Remove("LoadingFromCache");
+                }
+                
+                if (loadTask.IsFaulted || loadTask.Result == null)
+                {
+                    LastConnectionError = loadTask.Exception != null
+                        ? $"Better Continents: cached world settings failed to load ({loadTask.Exception.Message}), please reconnect to download them again!"
+                        : $"Better Continents: cached world settings are corrupted, please reconnect to download them again!";
+                    
+                    LogError(LastConnectionError);
+                    m_connectionStatus.SetValue(null, ZNet.ConnectionStatus.ErrorConnectFailed);
+                    ZNet.instance.Disconnect(peer);
+                    WorldCache.DeleteCacheItem(id);
+                    yield break;
+                }
+
+                Settings = loadTask.Result.Value;
+                Settings.Dump();
+
+
+                // We only care about server/client version match when the server sends a world that actually uses the mod
+                if (Settings.EnabledForThisWorld && ServerVersion != ModInfo.Version)
+                {
+                    LastConnectionError = $"Better Continents: world has the mod enabled, but server {ServerVersion} and client {ModInfo.Version} versions don't match";
+                    LogError(LastConnectionError);
+                    m_connectionStatus.SetValue(null, ZNet.ConnectionStatus.ErrorConnectFailed);
+                    ZNet.instance.Disconnect(peer);
+                }
+                else if (!Settings.EnabledForThisWorld)
+                {
+                    Log($"Server world does not have Better Continents enabled, skipping version check");
+                }
+                
+                peer.m_rpc.Invoke("BetterContinentsReady", 0);
+            }
+
+            private static IEnumerator ReceivedSettings(ZNetPeer peer)
+            {
+                int finalHash = GetHashCode(SettingsReceiveBuffer);
+                if (finalHash == SettingsReceiveHash)
+                {
+                    Log($"Settings transfer complete, unpacking them now");
+                    
+                    var loadingTask = Task.Run(() => {
+                        var settingsPkg = new ZPackage(SettingsReceiveBuffer);
+                        var settings = BetterContinentsSettings.Load(settingsPkg);
+                        WorldCache.Add(settingsPkg);
+                        return settings;
+                    });
+
+                    try
+                    {
+                        BetterContinents.UICallbacks["ReceivedSettings"] = () => DisplayMessage($"Better Continents: initializing from server config");
+                        yield return new WaitUntil(() => loadingTask.IsCompleted);
+                    }
+                    finally
+                    {
+                        BetterContinents.UICallbacks.Remove("ReceivedSettings");
+                    }
+
+                    if (loadingTask.IsFaulted)
+                    {
+                        LastConnectionError = $"Better Continents: cached world settings failed to load ({loadingTask.Exception.Message}), please reconnect to download them again!";
+                        LogError(LastConnectionError);
                         m_connectionStatus.SetValue(null, ZNet.ConnectionStatus.ErrorConnectFailed);
                         ZNet.instance.Disconnect(peer);
-                        return;
+                        yield break;
                     }
 
-                    Buffer.BlockCopy(packetData, 0, SettingsReceiveBuffer, offset, packetData.Length);
-                    
-                    SettingsReceiveBufferBytesReceived += packetData.Length;
+                    Settings = loadingTask.Result;
+                    Settings.Dump();
 
-                    Log($"Received settings packet {packetData.Length} bytes at {offset}, {SettingsReceiveBufferBytesReceived} / {SettingsReceiveBuffer.Length} received");
-                    if (SettingsReceiveBufferBytesReceived == SettingsReceiveBuffer.Length)
+                    // We only care about server/client version match when the server sends a world that actually uses the mod
+                    if (Settings.EnabledForThisWorld && ServerVersion != ModInfo.Version)
                     {
-                        int finalHash = GetHashCode(SettingsReceiveBuffer);
-                        if (finalHash == SettingsReceiveHash)
-                        {
-                            Log($"Settings transfer complete");
-
-                            var settingsPkg = new ZPackage(SettingsReceiveBuffer);
-                            Settings = BetterContinentsSettings.Load(settingsPkg);
-                            Settings.Dump();
-                            
-                            WorldCache.Add(settingsPkg);
-
-                            // We only care about server/client version match when the server sends a world that actually uses the mod
-                            if (Settings.EnabledForThisWorld && ServerVersion != ModInfo.Version)
-                            {
-                                LastConnectionError = $"Server world has Better Continents enabled, but server mod {ServerVersion} and client mod {ModInfo.Version} don't match";
-                                LogError(LastConnectionError);
-                                m_connectionStatus.SetValue(null, ZNet.ConnectionStatus.ErrorConnectFailed);
-                                ZNet.instance.Disconnect(peer);
-                            }
-                            else if (!Settings.EnabledForThisWorld)
-                            {
-                                Log($"Server world does not have Better Continents enabled, skipping version check");
-                            }
-                        }
-                        else
-                        {
-                            LogError($"{LastConnectionError}: hash mismatch, got {finalHash}, expected {SettingsReceiveHash}");
-                            m_connectionStatus.SetValue(null, ZNet.ConnectionStatus.ErrorConnectFailed);
-                            ZNet.instance.Disconnect(peer);
-                        }
+                        LastConnectionError = $"Better Continents: world has Better Continents enabled, but server {ServerVersion} and client {ModInfo.Version} mod versions don't match";
+                        LogError(LastConnectionError);
+                        m_connectionStatus.SetValue(null, ZNet.ConnectionStatus.ErrorConnectFailed);
+                        ZNet.instance.Disconnect(peer);
                     }
-                });
+                    else if (!Settings.EnabledForThisWorld)
+                    {
+                        Log($"Server world does not have Better Continents enabled, skipping version check");
+                    }
+
+                    peer.m_rpc.Invoke("BetterContinentsReady", 0);
+                }
+                else
+                {
+                    LogError($"{LastConnectionError}: hash mismatch, got {finalHash}, expected {SettingsReceiveHash}");
+                    m_connectionStatus.SetValue(null, ZNet.ConnectionStatus.ErrorConnectFailed);
+                    ZNet.instance.Disconnect(peer);
+                }
+            }
+
+            private static void DisplayMessage(string msg)
+            {
+                CreateTextStyle();
+                int yOffs = Screen.height - 75;
+                GUI.Label(new Rect(75, yOffs, Screen.width - 50, 50), msg, TextStyle);
             }
 
             [HarmonyPrefix, HarmonyPatch("RPC_Error")]
@@ -308,7 +419,7 @@ namespace BetterContinents
             {
                 if (error == 69)
                 {
-                    LastConnectionError = $"Better Continents version doesn't match server (you have {ModInfo.Version})";
+                    LastConnectionError = $"Better Continents: local mod version doesn't match the servers (local one is {ModInfo.Version}, server one is unknown)";
                     error = (int)ZNet.ConnectionStatus.ErrorConnectFailed;
                 }
             }
@@ -338,7 +449,7 @@ namespace BetterContinents
             {
                 throw new NotImplementedException("RPC_PeerInfo function was not patched correctly!");
             }
-            
+
             private static IEnumerator SendSettings(ZNet instance, ZRpc rpc, ZPackage pkg)
             {
                 byte[] ArraySlice(byte[] source, int offset, int length)
@@ -358,7 +469,7 @@ namespace BetterContinents
                 {
                     Log($"World is using Better Continents, so client version must match server version {ModInfo.Name}");
 
-                    if (!ClientModVersions.TryGetValue(peer.m_uid, out var bcClientInfo))
+                    if (!ClientInfo.TryGetValue(peer.m_uid, out var bcClientInfo))
                     {
                         Log($"Client info for {PeerName(peer)} not found, client has an old version of Better Continents, or none!");
                         rpc.Invoke("Error", ZNet.ConnectionStatus.ErrorConnectFailed);
@@ -414,10 +525,18 @@ namespace BetterContinents
                             rpc.GetSocket().Flush();
                             sentBytes += packetSize;
                             Log($"Sent {sentBytes} of {settingsData.Length} bytes");
-
-                            yield return new WaitUntil(() => rpc.GetSocket().GetSendQueueSize() < SendChunkSize);
+                            float timeout = Time.time + 30;
+                            yield return new WaitUntil(() => rpc.GetSocket().GetSendQueueSize() < SendChunkSize || Time.time > timeout);
+                            if (Time.time > timeout)
+                            {
+                                Log($"Timed out sending config to client {PeerName(peer)} after 30 seconds, disconnecting them");
+                                peer.m_rpc.Invoke("Error", ZNet.ConnectionStatus.ErrorConnectFailed);
+                                ZNet.instance.Disconnect(peer);
+                                yield break;
+                            }
                         }
                     }
+                    yield return new WaitUntil(() => ClientInfo[peer.m_uid].readyForPeerInfo || !peer.m_socket.IsConnected());
                 }
 
                 RPC_PeerInfo(instance, rpc, pkg);

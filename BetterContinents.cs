@@ -1,10 +1,12 @@
 using System;
+using System.Collections.Generic;
 using System.Reflection;
 using BepInEx;
 using BepInEx.Configuration;
 using HarmonyLib;
 using UnityEngine;
 using UnityEngine.Assertions;
+using UnityEngine.SceneManagement;
 using UnityEngine.UI;
 
 namespace BetterContinents
@@ -138,11 +140,27 @@ namespace BetterContinents
 
             new Harmony("BetterContinents.Harmony").PatchAll();
             Log("Awake");
+
+            // Always reset the UI callbacks on scene change
+            SceneManager.activeSceneChanged += (_, __) =>
+            {
+                UICallbacks.Clear();
+            };
         }
         
         private static T GetDelegate<T>(Type type, string method) where T : Delegate 
             => AccessTools.MethodDelegate<T>(
                 AccessTools.Method(type, method));
+
+        public static Dictionary<string, Action> UICallbacks = new Dictionary<string, Action>();
+        
+        private void OnGUI()
+        {
+            foreach (var callback in UICallbacks.Values)
+            {
+                callback();
+            }
+        }
         
         // Debug mode helpers
         [HarmonyPatch(typeof(Player))]
@@ -159,8 +177,7 @@ namespace BetterContinents
             
             [HarmonyPostfix, HarmonyPatch(nameof(Player.OnSpawned))]
             private static void OnSpawnedPostfix()
-            {
-                if (AllowDebugActions)
+            { if (AllowDebugActions)
                 {
                     AccessTools.Field(typeof(Console), "m_cheat").SetValue(Console.instance, true);
                     Minimap.instance.ExploreAll();
@@ -258,6 +275,14 @@ namespace BetterContinents
                     LastConnectionError = null;
                 }
             }
+        }
+
+        public static Texture CreateFillTexture(Color32 color)
+        {
+            var tex = new Texture2D(1, 1);
+            tex.SetPixels32(new []{ color });
+            tex.Apply(false);
+            return tex;
         }
     }
 }
