@@ -76,10 +76,10 @@ namespace BetterContinents
         public static void Log(string msg) => Debug.Log($"[BetterContinents] {msg}");
         public static void LogError(string msg) => Debug.LogError($"[BetterContinents] {msg}");
 
-        private static bool AllowDebugActions => ZNet.instance && ZNet.instance.IsServer() &&
-                                                 Settings.EnabledForThisWorld && ConfigDebugModeEnabled.Value;
-        
-        private static BetterContinentsSettings Settings;
+        public static bool AllowDebugActions => ZNet.instance && ZNet.instance.IsServer() &&
+                                                Settings.EnabledForThisWorld && ConfigDebugModeEnabled.Value;
+
+        public static BetterContinentsSettings Settings;
         
         private void Awake()
         {
@@ -106,24 +106,24 @@ namespace BetterContinents
                     .Value("Heightmap Amount").Description("Multiplier of the height value from the heightmap file (more than 1 leads to higher max height than vanilla, good results are not guaranteed)").Default(1f).Range(0f, 5f).Bind(out ConfigHeightmapAmount)
                     .Value("Heightmap Blend").Description("How strongly to blend the heightmap file into the final result").Default(1f).Range(0f, 1f).Bind(out ConfigHeightmapBlend)
                     .Value("Heightmap Add").Description("How strongly to add the heightmap file to the final result (usually you want to blend it instead)").Default(0f).Range(-1f, 1f).Bind(out ConfigHeightmapAdd)
+                .Group("BetterContinents.Roughmap")
+                    .Value("Roughmap File").Description("Path to a roughmap file to use. See the description on Nexusmods.com for the specifications (it will fail if they are not met)").Bind(out ConfigRoughmapFile)
+                    .Value("Roughmap Blend").Description("How strongly to apply the roughmap file").Default(1f).Range(0f, 1f).Bind(out ConfigRoughmapBlend)
+                .Group("BetterContinents.Flatmap")
+                    .Value("Use Roughmap For Flatmap").Description("Use the flatmap as the rough map, but inverted (black rough map results in totally flat terrain)").Default(true).Bind(out ConfigUseRoughInvertedForFlat)
+                    .Value("Flatmap File").Description("Path to a flatmap file to use. See the description on Nexusmods.com for the specifications (it will fail if they are not met)").Bind(out ConfigFlatmapFile)
+                    .Value("Flatmap Blend").Description("How strongly to apply the flatmap file (also applies when using Use Roughmap For Flatmap)").Default(1f).Range(0f, 1f).Bind(out ConfigFlatmapBlend)
                 .Group("BetterContinents.Biomemap")
-                    .Value("Biomemap").Description("Path to a biomemap file to use. See the description on Nexusmods.com for the specifications (it will fail if they are not met)").Bind(out ConfigBiomemapFile)
+                    .Value("Biomemap File").Description("Path to a biomemap file to use. See the description on Nexusmods.com for the specifications (it will fail if they are not met)").Bind(out ConfigBiomemapFile)
                 .Group("BetterContinents.Forest")
                     .Value("Forest Scale").Description("Scales forested/cleared area size").Default(0.5f).Range(0f, 1f).Bind(out ConfigForestScale)
                     .Value("Forest Amount").Description("Adjusts how much forest there is, relative to clearings").Default(0.5f).Range(0f, 1f).Bind(out ConfigForestAmount)
                     .Value("Forest Factor Overrides All Trees").Description("Trees in all biomes will be affected by forest factor (both procedural and from forestmap)").Default(false).Bind(out ConfigForestFactorOverrideAllTrees)
-                    .Value("Forestmap").Description("Path to a forestmap file to use. See the description on Nexusmods.com for the specifications (it will fail if they are not met)").Bind(out ConfigForestmapFile)
+                    .Value("Forestmap File").Description("Path to a forestmap file to use. See the description on Nexusmods.com for the specifications (it will fail if they are not met)").Bind(out ConfigForestmapFile)
                     .Value("Forestmap Multiply").Description("How strongly to scale the vanilla forest factor by the forestmap").Default(1f).Range(0f, 1f).Bind(out ConfigForestmapMultiply)
                     .Value("Forestmap Add").Description("How strongly to add the forestmap directly to the vanilla forest factor").Default(1f).Range(0f, 1f).Bind(out ConfigForestmapAdd)
                 .Group("BetterContinents.Spawnmap")
-                    .Value("Spawnmap").Description("Path to a spawnmap file to use. See the description on Nexusmods.com for the specifications (it will fail if they are not met)").Bind(out ConfigSpawnmapFile)
-                .Group("BetterContinents.Roughmap")
-                    .Value("Roughmap").Description("Path to a roughmap file to use. See the description on Nexusmods.com for the specifications (it will fail if they are not met)").Bind(out ConfigRoughmapFile)
-                    .Value("Roughmap Blend").Description("How strongly to apply the roughmap file").Default(1f).Range(0f, 1f).Bind(out ConfigRoughmapBlend)
-                .Group("BetterContinents.Flatmap")
-                    .Value("Use Roughmap For Flatmap").Description("Use the flatmap as the rough map, but inverted (black rough map results in totally flat terrain)").Default(true).Bind(out ConfigUseRoughInvertedForFlat)
-                    .Value("Flatmap").Description("Path to a flatmap file to use. See the description on Nexusmods.com for the specifications (it will fail if they are not met)").Bind(out ConfigFlatmapFile)
-                    .Value("Flatmap Blend").Description("How strongly to apply the flatmap file (also applies when using Use Roughmap For Flatmap)").Default(1f).Range(0f, 1f).Bind(out ConfigFlatmapBlend)
+                    .Value("Spawnmap File").Description("Path to a spawnmap file to use. See the description on Nexusmods.com for the specifications (it will fail if they are not met)").Bind(out ConfigSpawnmapFile)
                 .Group("BetterContinents.Ridges")
                     .Value("Max Ridge Height").Description("Max height of ridge features (set this to 0 to turn OFF ridges entirely)").Default(0.5f).Range(0f, 1f).Bind(out ConfigMaxRidgeHeight)
                     .Value("Ridge Size").Description("Size of ridge features").Default(0.5f).Range(0f, 1f).Bind(out ConfigRidgeSize)
@@ -141,25 +141,16 @@ namespace BetterContinents
             new Harmony("BetterContinents.Harmony").PatchAll();
             Log("Awake");
 
-            // Always reset the UI callbacks on scene change
-            SceneManager.activeSceneChanged += (_, __) =>
-            {
-                UICallbacks.Clear();
-            };
+            UI.Init();
         }
         
         private static T GetDelegate<T>(Type type, string method) where T : Delegate 
             => AccessTools.MethodDelegate<T>(
                 AccessTools.Method(type, method));
 
-        public static Dictionary<string, Action> UICallbacks = new Dictionary<string, Action>();
-        
         private void OnGUI()
         {
-            foreach (var callback in UICallbacks.Values)
-            {
-                callback();
-            }
+            UI.OnGUI();
         }
         
         // Debug mode helpers
@@ -182,6 +173,9 @@ namespace BetterContinents
                     AccessTools.Field(typeof(Console), "m_cheat").SetValue(Console.instance, true);
                     Minimap.instance.ExploreAll();
                     Player.m_debugMode = true;
+                    EnvMan.instance.m_debugEnv = "clear";
+                    EnvMan.instance.m_debugTimeOfDay = true;
+                    EnvMan.instance.m_debugTime = 0.5f;
                     Player.m_localPlayer.SetGodMode(true);
                 }
             }
@@ -275,14 +269,6 @@ namespace BetterContinents
                     LastConnectionError = null;
                 }
             }
-        }
-
-        public static Texture CreateFillTexture(Color32 color)
-        {
-            var tex = new Texture2D(1, 1);
-            tex.SetPixels32(new []{ color });
-            tex.Apply(false);
-            return tex;
         }
     }
 }

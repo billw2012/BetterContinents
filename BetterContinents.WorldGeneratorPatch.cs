@@ -9,10 +9,11 @@ namespace BetterContinents
     {
         // Changes to height, biome, forests, rivers etc. (this is the functional part of the mod)
         [HarmonyPatch(typeof(WorldGenerator))]
-        private class WorldGeneratorPatch
+        public class WorldGeneratorPatch
         {
             // The base map x, y coordinates in 0..1 range
-            private static Dictionary<Vector2, float> cachedHeights; 
+            private static Dictionary<Vector2, float> cachedHeights;
+            private static bool cacheEnabled = true;
 
             private static readonly string[] TreePrefixes =
             {
@@ -46,11 +47,19 @@ namespace BetterContinents
                             v.m_forestTresholdMin = 0f;
                             v.m_forestTresholdMax = 1.15f;
                         }
+
                         // Log($"{v.m_name}, {v.m_prefab}, {v.m_biomeArea}, {v.m_biome}, {v.m_inForest}, {v.m_forestTresholdMin}, {v.m_forestTresholdMax}, {v.m_forcePlacement}");
                     }
                 }
             }
-            
+
+            public static void DisableCache() => cacheEnabled = false;
+            public static void EnableCache()
+            {
+                cacheEnabled = true;
+                cachedHeights.Clear();
+            }
+
             // wx, wy are [-10500, 10500]
             // __result should be [0, 1]
             [HarmonyPrefix, HarmonyPatch("GetBaseHeight")]
@@ -61,7 +70,7 @@ namespace BetterContinents
                     return true;
                 }
                 
-                if (cachedHeights.TryGetValue(new Vector2(wx, wy), out __result))
+                if (cacheEnabled && cachedHeights.TryGetValue(new Vector2(wx, wy), out __result))
                 {
                     return false;
                 }
@@ -89,20 +98,24 @@ namespace BetterContinents
                 {
                     return;
                 }
-                
-                if (cachedHeights.Count >= 100000)
+
+                if (cacheEnabled)
                 {
-                    // Can't easily do LRU, so we will just clear it entirely
-                    cachedHeights.Clear();
+                    if (cachedHeights.Count >= 100000)
+                    {
+                        // Can't easily do LRU, so we will just clear it entirely
+                        cachedHeights.Clear();
+                    }
+
+                    // Do this AFTER clearing so we have it available below
+                    cachedHeights[new Vector2(wx, wy)] = __result;
                 }
-                // Do this AFTER clearing so we have it available below
-                cachedHeights[new Vector2(wx, wy)] = __result;
             }
             
             private delegate float GetBaseHeightDelegate(WorldGenerator instance, float wx, float wy, bool menuTerrain);
             private static readonly GetBaseHeightDelegate GetBaseHeightMethod 
                 = GetDelegate<GetBaseHeightDelegate>(typeof(WorldGenerator), "GetBaseHeight");
-            
+
             [HarmonyPostfix, HarmonyPatch("GetBiomeHeight")]
             private static void GetBiomeHeightPostfix(WorldGenerator __instance, float wx, float wy, ref float __result, World ___m_world)
             {

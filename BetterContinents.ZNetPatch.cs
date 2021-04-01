@@ -169,31 +169,6 @@ namespace BetterContinents
 
             private static readonly FieldInfo m_connectionStatus = AccessTools.Field(typeof(ZNet), "m_connectionStatus");
 
-            private static readonly Color ValheimColor = new Color(1, 0.714f, 0.361f, 1);
-            private static Texture BorderTexture;
-            private static Texture FrontTexture;
-            private static Texture BackTexture;
-            private static GUIStyle TextStyle;
-            
-            private static void CreateTextStyle()
-            {
-                if (TextStyle != null)
-                {
-                    return;
-                }
-
-                TextStyle = new GUIStyle(GUI.skin.label);
-                TextStyle.font = Resources.FindObjectsOfTypeAll(typeof(Text)).OfType<Text>()
-                    .Select(t => t.font)
-                    .FirstOrDefault(f => f.name == "AveriaSerifLibre-Bold") ?? TextStyle.font;
-                ;
-                TextStyle.normal.textColor = Color.Lerp(ValheimColor, Color.white, 0.75f);
-                // Trying to assign alignment crashes with method not found exception
-                // TextStyle.alignment = TextAnchor.MiddleCenter;
-                TextStyle.fontSize = 40;
-                TextStyle.fontStyle = FontStyle.Bold;
-            }
-
             // Register our RPC for receiving settings on clients
             [HarmonyPrefix, HarmonyPatch("OnNewConnection")]
             private static void OnNewConnectionPrefix(ZNet __instance, ZNetPeer peer)
@@ -222,12 +197,6 @@ namespace BetterContinents
                 }
                 else
                 {
-                    // Only need these on the client
-                    BorderTexture = CreateFillTexture(Color.Lerp(ValheimColor, Color.white, 0.25f));
-                    FrontTexture = CreateFillTexture(Color.Lerp(ValheimColor, Color.black, 0.5f));
-                    BackTexture = CreateFillTexture(Color.Lerp(ValheimColor, Color.black, 0.85f));
-                    TextStyle = null; // We are "resetting" this in-case it got invalidated. We can only actually create it in a GUI function
-                    
                     peer.m_rpc.Invoke("BetterContinentsServerHandshake", ModInfo.Version, WorldCache.SerializeCacheList());
 
                     peer.m_rpc.Register("BetterContinentsVersion", (ZRpc rpc, string serverVersion) =>
@@ -250,17 +219,7 @@ namespace BetterContinents
                         SettingsReceiveBufferBytesReceived = 0;
                         Log($"Receiving settings from server ({SettingsReceiveBuffer.Length} bytes)");
 
-                        BetterContinents.UICallbacks["ConfigDownload"] = () =>
-                        {
-                            CreateTextStyle();
-
-                            int percent = SettingsReceiveBufferBytesReceived * 100 / SettingsReceiveBuffer.Length;
-                            int yOffs = Screen.height - 75;
-                            GUI.DrawTexture(new Rect(50 - 4, yOffs - 4, Screen.width - 100 + 8, 50 + 8), BorderTexture, ScaleMode.StretchToFill);
-                            GUI.DrawTexture(new Rect(50, yOffs, Screen.width - 100, 50), BackTexture, ScaleMode.StretchToFill);
-                            GUI.DrawTexture(new Rect(50, yOffs, (Screen.width - 100) * percent / 100f, 50), FrontTexture, ScaleMode.StretchToFill);
-                            GUI.Label(new Rect(75, yOffs, Screen.width - 50, 50), $"Better Continents: downloading world settings from server ...", TextStyle);
-                        };
+                        UI.Add("ConfigDownload", () => UI.ProgressBar(SettingsReceiveBufferBytesReceived * 100 / SettingsReceiveBuffer.Length, $"Better Continents: downloading world settings from server ..."));
                     });
 
                     peer.m_rpc.Register("BetterContinentsConfigPacket", (ZRpc rpc, int offset, int packetHash, ZPackage packet) =>
@@ -284,7 +243,7 @@ namespace BetterContinents
                         Log($"Received settings packet {packetData.Length} bytes at {offset}, {SettingsReceiveBufferBytesReceived} / {SettingsReceiveBuffer.Length} received");
                         if (SettingsReceiveBufferBytesReceived == SettingsReceiveBuffer.Length)
                         {
-                            BetterContinents.UICallbacks.Remove("ConfigDownload");
+                            UI.Remove("ConfigDownload");
                             __instance.StartCoroutine(ReceivedSettings(peer));
                         }
                     });
@@ -307,12 +266,12 @@ namespace BetterContinents
 
                 try
                 {
-                    BetterContinents.UICallbacks["LoadingFromCache"] = () => DisplayMessage($"Better Continents: initializing from cached config");
+                    UI.Add("LoadingFromCache", () => UI.DisplayMessage($"Better Continents: initializing from cached config"));
                     yield return new WaitUntil(() => loadTask.IsCompleted);
                 }
                 finally
                 {
-                    BetterContinents.UICallbacks.Remove("LoadingFromCache");
+                    UI.Remove("LoadingFromCache");
                 }
                 
                 if (loadTask.IsFaulted || loadTask.Result == null)
@@ -364,12 +323,12 @@ namespace BetterContinents
 
                     try
                     {
-                        BetterContinents.UICallbacks["ReceivedSettings"] = () => DisplayMessage($"Better Continents: initializing from server config");
+                        UI.Add("ReceivedSettings", () => UI.DisplayMessage($"Better Continents: initializing from server config"));
                         yield return new WaitUntil(() => loadingTask.IsCompleted);
                     }
                     finally
                     {
-                        BetterContinents.UICallbacks.Remove("ReceivedSettings");
+                        UI.Remove("ReceivedSettings");
                     }
 
                     if (loadingTask.IsFaulted)
@@ -407,12 +366,6 @@ namespace BetterContinents
                 }
             }
 
-            private static void DisplayMessage(string msg)
-            {
-                CreateTextStyle();
-                int yOffs = Screen.height - 75;
-                GUI.Label(new Rect(75, yOffs, Screen.width - 50, 50), msg, TextStyle);
-            }
 
             [HarmonyPrefix, HarmonyPatch("RPC_Error")]
             private static void RPC_ErrorPrefix(ref int error)

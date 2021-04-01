@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.IO;
+using HarmonyLib;
 using UnityEngine;
 
 namespace BetterContinents
@@ -8,7 +9,7 @@ namespace BetterContinents
     public partial class BetterContinents
     {
         // These are what are baked into the world when it is created
-        private struct BetterContinentsSettings
+        public struct BetterContinentsSettings
         {
             // Add new properties at the end, and comment where new versions start
             public const int LatestVersion = 5;
@@ -72,6 +73,13 @@ namespace BetterContinents
             private ImageMapFloat Flatmap;
             private ImageMapFloat Forestmap;
 
+            public bool HasHeightmap => this.Heightmap != null;
+            public bool HasBiomemap => this.Biomemap != null;
+            public bool HasSpawnmap => this.Spawnmap != null;
+            public bool HasRoughmap => this.Roughmap != null;
+            public bool HasFlatmap => this.Flatmap != null;
+            public bool HasForestmap => this.Forestmap != null;
+            
             public bool OverrideBiomes => this.Biomemap != null;
             public bool UseSpawnmap => this.Spawnmap != null;
             public bool UseRoughmap => this.Roughmap != null && this.RoughmapBlend > 0;
@@ -211,7 +219,7 @@ namespace BetterContinents
 
                     var flatmapPath = FlatmapPath();
                     if (ConfigUseRoughInvertedForFlat.Value && Roughmap != null ||
-                        !ConfigUseRoughInvertedForFlat.Value && string.IsNullOrEmpty(flatmapPath))
+                        !ConfigUseRoughInvertedForFlat.Value && !string.IsNullOrEmpty(flatmapPath))
                     {
                         UseRoughInvertedAsFlat = ConfigUseRoughInvertedForFlat.Value;
                         FlatmapBlend = ConfigFlatmapBlend.Value;
@@ -659,48 +667,36 @@ namespace BetterContinents
 
             public Vector2? FindSpawn(string spawn) => this.Spawnmap.FindSpawn(spawn);
             public IEnumerable<Vector2> GetAllSpawns(string spawn) => this.Spawnmap.GetAllSpawns(spawn);
-
+            
             public void ReloadHeightmap()
             {
-                if (Heightmap != null)
+                if (Heightmap != null && Heightmap.LoadSourceImage())
                 {
-                    if (Heightmap.LoadSourceImage())
-                    {
-                        Heightmap.CreateMap();
-                    }
+                    Heightmap.CreateMap();
                 }
             }
             
             public void ReloadBiomemap()
             {
-                if (Biomemap != null)
+                if (Biomemap != null && Biomemap.LoadSourceImage())
                 {
-                    if (Biomemap.LoadSourceImage())
-                    {
-                        Biomemap.CreateMap();
-                    }
+                    Biomemap.CreateMap();
                 }
             }
             
             public void ReloadSpawnmap()
             {
-                if (Spawnmap != null)
+                if (Spawnmap != null && Spawnmap.LoadSourceImage())
                 {
-                    if (Spawnmap.LoadSourceImage())
-                    {
-                        Spawnmap.CreateMap();
-                    }
+                    Spawnmap.CreateMap();
                 }
             }       
             
             public void ReloadRoughmap()
             {
-                if (Roughmap != null)
+                if (Roughmap != null && Roughmap.LoadSourceImage())
                 {
-                    if (Roughmap.LoadSourceImage())
-                    {
-                        Roughmap.CreateMap();
-                    }
+                    Roughmap.CreateMap();
                 }
             }
                         
@@ -710,12 +706,17 @@ namespace BetterContinents
                 {
                     ReloadRoughmap();
                 }
-                else if (Flatmap != null)
+                else if (Flatmap != null && Flatmap.LoadSourceImage())
                 {
-                    if (Flatmap.LoadSourceImage())
-                    {
-                        Flatmap.CreateMap();
-                    }
+                    Flatmap.CreateMap();
+                }
+            }
+                        
+            public void ReloadForestmap()
+            {
+                if (Forestmap != null && Forestmap.LoadSourceImage())
+                {
+                    Forestmap.CreateMap();
                 }
             }
         }

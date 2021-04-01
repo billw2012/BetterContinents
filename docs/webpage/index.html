@@ -1,0 +1,44 @@
+<script src='https://cdn.jsdelivr.net/npm/chart.js@2.9.3/dist/Chart.min.js'></script>
+<canvas id="chart" width="600px" height="200px" style="position: relative;"></canvas>
+<div class="slidecontainer">
+    <input type="range" min="0" max="100" value="50" class="slider" id="myRange">
+</div>
+<script>
+    let data = [0, 5, 3, 10, 2, 7];
+    const ctx = document.getElementById('chart').getContext('2d');
+    let chart = new Chart(ctx, {
+        type: 'line',
+        data: {
+            labels: ["", "", "", "", "", ""],
+            datasets: [{
+                data: data,
+                backgroundColor: 'gray',
+                pointBackgroundColor: 'transparent',
+                label: "",
+                lineTension: 0.5
+            }]
+        },
+        options: {
+            responsive: false,
+            legend: {
+                display: false
+            },
+            scales: {
+                yAxes: [{
+                    display: false,
+                    ticks: {
+                        min: 0,
+                        max: 10
+                    }
+                }]
+            }
+        }
+    });
+
+    var slider = document.getElementById("myRange");
+    slider.oninput = function() {
+        chart.data.datasets[0].data = data.map(x => x * this.value / 100);
+        console.log(chart.data.datasets[0].data);
+        chart.update();
+    } 
+</script>

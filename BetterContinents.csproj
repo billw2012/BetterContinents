@@ -231,12 +231,15 @@
     <Compile Include="Color32Comparer.cs" />
     <Compile Include="ConfigHelpers.cs" />
     <Compile Include="ConfigurationManagerAttributes.cs" />
+    <Compile Include="DebugUtils.cs" />
+    <Compile Include="GameUtils.cs" />
     <Compile Include="ImageMapBase.cs" />
     <Compile Include="ImageMapBiome.cs" />
     <Compile Include="ImageMapFloat.cs" />
     <Compile Include="ImageMapSpawn.cs" />
     <Compile Include="Mod.Info.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
+    <Compile Include="UI.cs" />
   </ItemGroup>
   <ItemGroup>
     <None Include="packages.config" />
