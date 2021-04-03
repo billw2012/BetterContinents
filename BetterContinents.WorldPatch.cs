@@ -39,6 +39,7 @@ namespace BetterContinents
                 string newName = ourMetaPath + ".new";
                 string oldName = ourMetaPath + ".old";
                 byte[] binaryData = zpackage.GetArray();
+                Directory.CreateDirectory(Path.GetDirectoryName(ourMetaPath));
                 using (BinaryWriter binaryWriter = new BinaryWriter(File.Create(newName)))
                 {
                     binaryWriter.Write(binaryData.Length);
