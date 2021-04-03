@@ -105,27 +105,23 @@ namespace BetterContinents
                 ShowButton("Hide All", "hide");
             }            
             GUILayout.EndVertical();
-            // GUILayout.BeginVertical("Utils", GUI.skin.window);
-            // {
-            //     ShowButton("Fall objects", "fall");
-            // }
-            // GUILayout.EndVertical();
+            GUILayout.BeginVertical("Utils", GUI.skin.window);
+            {
+                ShowButton("Toggle Minimap Clouds", "clouds");
+                ShowButton("Refresh", "refresh");
+                ShowButton("Regenerate Locs", "regenloc");
+            }
+            GUILayout.EndVertical();
         }
 
         private static void ShowOptionalButton(bool enabled, string name, string command)
         {
             GUI.enabled = enabled;
-            //if (enabled)
-            //{
-                if (GUILayout.Button(name, GUILayout.ExpandWidth(false)))
-                {
-                    DebugUtils.RunConsoleCommand(command);
-                }
-            //}
-            //else
-            //{
-            //    GUILayout.Label($"({name} disabled)", GUILayout.ExpandWidth(false));
-            //}
+            if (GUILayout.Button(name, GUILayout.ExpandWidth(false)))
+            {
+                DebugUtils.RunConsoleCommand("bc " + command);
+            }
+            GUI.enabled = true;
         }
 
         private static void ShowButton(string name, string command) => ShowOptionalButton(true, name, command);

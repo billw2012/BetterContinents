@@ -49,8 +49,7 @@
       <Private>False</Private>
     </Reference>
     <Reference Include="assembly_valheim, Version=0.0.0.0, Culture=neutral, PublicKeyToken=null">
-      <HintPath>..\..\..\..\..\Program Files (x86)\Steam\steamapps\common\Valheim\valheim_Data\Managed\assembly_valheim.dll</HintPath>
-      <Private>False</Private>
+      <HintPath>..\..\..\..\..\Program Files (x86)\Steam\steamapps\common\Valheim\valheim_Data\Managed\publicized_assemblies\assembly_valheim_publicized.dll</HintPath>
     </Reference>
     <Reference Include="BepInEx, Version=5.4.8.0, Culture=neutral, PublicKeyToken=null">
       <HintPath>lib\BepInEx\core\BepInEx.dll</HintPath>
@@ -259,7 +258,7 @@
       <Assemblies Include="$(TargetDir)*.dll" />
     </ItemGroup>
     <Exec Command="C:\Programs\pdb2mdb\pdb2mdb.exe &quot;$(TargetPath)&quot;" />
-    <Copy SourceFiles="@(Assemblies)" DestinationFolder="C:\program files (x86)\steam\steamapps\common\Valheim\BepInEx\plugins" />
+    <Copy SourceFiles="@(Assemblies)" DestinationFolder="C:\program files (x86)\steam\steamapps\common\Valheim-debug\BepInEx\plugins" />
   </Target>
   <Import Project="packages\Fody.6.3.0\build\Fody.targets" Condition="Exists('packages\Fody.6.3.0\build\Fody.targets')" />
   <Target Name="EnsureNuGetPackageBuildImports" BeforeTargets="PrepareForBuild">

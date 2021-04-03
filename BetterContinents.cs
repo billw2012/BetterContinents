@@ -15,52 +15,52 @@ namespace BetterContinents
     public partial class BetterContinents : BaseUnityPlugin
     {
         // See the Awake function for the config descriptions
-        private static ConfigEntry<bool> ConfigEnabled;
+        public static ConfigEntry<bool> ConfigEnabled;
         
-        private static ConfigEntry<float> ConfigContinentSize;
-        private static ConfigEntry<float> ConfigMountainsAmount;
-        private static ConfigEntry<float> ConfigSeaLevelAdjustment;
-        private static ConfigEntry<bool> ConfigOceanChannelsEnabled;
-        private static ConfigEntry<bool> ConfigRiversEnabled;
-        private static ConfigEntry<bool> ConfigMapEdgeDropoff;
-        private static ConfigEntry<bool> ConfigMountainsAllowedAtCenter;
+        public static ConfigEntry<float> ConfigContinentSize;
+        public static ConfigEntry<float> ConfigMountainsAmount;
+        public static ConfigEntry<float> ConfigSeaLevelAdjustment;
+        public static ConfigEntry<bool> ConfigOceanChannelsEnabled;
+        public static ConfigEntry<bool> ConfigRiversEnabled;
+        public static ConfigEntry<bool> ConfigMapEdgeDropoff;
+        public static ConfigEntry<bool> ConfigMountainsAllowedAtCenter;
 
-        private static ConfigEntry<string> ConfigMapSourceDir;
+        public static ConfigEntry<string> ConfigMapSourceDir;
         
-        private static ConfigEntry<string> ConfigHeightmapFile;
-        private static ConfigEntry<float> ConfigHeightmapAmount;
-        private static ConfigEntry<float> ConfigHeightmapBlend;
-        private static ConfigEntry<float> ConfigHeightmapAdd;
+        public static ConfigEntry<string> ConfigHeightmapFile;
+        public static ConfigEntry<float> ConfigHeightmapAmount;
+        public static ConfigEntry<float> ConfigHeightmapBlend;
+        public static ConfigEntry<float> ConfigHeightmapAdd;
         
-        private static ConfigEntry<string> ConfigBiomemapFile;
+        public static ConfigEntry<string> ConfigBiomemapFile;
 
-        private static ConfigEntry<string> ConfigSpawnmapFile;
+        public static ConfigEntry<string> ConfigSpawnmapFile;
         
-        private static ConfigEntry<string> ConfigRoughmapFile;
-        private static ConfigEntry<float> ConfigRoughmapBlend;
+        public static ConfigEntry<string> ConfigRoughmapFile;
+        public static ConfigEntry<float> ConfigRoughmapBlend;
         
-        private static ConfigEntry<bool> ConfigUseRoughInvertedForFlat;
-        private static ConfigEntry<string> ConfigFlatmapFile;
-        private static ConfigEntry<float> ConfigFlatmapBlend;
+        public static ConfigEntry<bool> ConfigUseRoughInvertedForFlat;
+        public static ConfigEntry<string> ConfigFlatmapFile;
+        public static ConfigEntry<float> ConfigFlatmapBlend;
         
-        private static ConfigEntry<float> ConfigForestScale;
-        private static ConfigEntry<float> ConfigForestAmount;
-        private static ConfigEntry<bool> ConfigForestFactorOverrideAllTrees;
-        private static ConfigEntry<string> ConfigForestmapFile;
-        private static ConfigEntry<float> ConfigForestmapMultiply;
-        private static ConfigEntry<float> ConfigForestmapAdd;
+        public static ConfigEntry<float> ConfigForestScale;
+        public static ConfigEntry<float> ConfigForestAmount;
+        public static ConfigEntry<bool> ConfigForestFactorOverrideAllTrees;
+        public static ConfigEntry<string> ConfigForestmapFile;
+        public static ConfigEntry<float> ConfigForestmapMultiply;
+        public static ConfigEntry<float> ConfigForestmapAdd;
         
-        private static ConfigEntry<float> ConfigMaxRidgeHeight;
-        private static ConfigEntry<float> ConfigRidgeSize;
-        private static ConfigEntry<float> ConfigRidgeBlend;
-        private static ConfigEntry<float> ConfigRidgeAmount;
+        public static ConfigEntry<float> ConfigMaxRidgeHeight;
+        public static ConfigEntry<float> ConfigRidgeSize;
+        public static ConfigEntry<float> ConfigRidgeBlend;
+        public static ConfigEntry<float> ConfigRidgeAmount;
         
-        private static ConfigEntry<bool> ConfigOverrideStartPosition;
-        private static ConfigEntry<float> ConfigStartPositionX;
-        private static ConfigEntry<float> ConfigStartPositionY;
+        public static ConfigEntry<bool> ConfigOverrideStartPosition;
+        public static ConfigEntry<float> ConfigStartPositionX;
+        public static ConfigEntry<float> ConfigStartPositionY;
         
-        private static ConfigEntry<bool> ConfigDebugModeEnabled;
-        private static ConfigEntry<bool> ConfigDebugSkipDefaultLocationPlacement;
+        public static ConfigEntry<bool> ConfigDebugModeEnabled;
+        public static ConfigEntry<bool> ConfigDebugSkipDefaultLocationPlacement;
         
         private const float WorldSize = 10500f;
         private static readonly Vector2 Half = Vector2.one * 0.5f;
@@ -168,7 +168,8 @@ namespace BetterContinents
             
             [HarmonyPostfix, HarmonyPatch(nameof(Player.OnSpawned))]
             private static void OnSpawnedPostfix()
-            { if (AllowDebugActions)
+            { 
+                if (AllowDebugActions)
                 {
                     AccessTools.Field(typeof(Console), "m_cheat").SetValue(Console.instance, true);
                     Minimap.instance.ExploreAll();
@@ -177,6 +178,7 @@ namespace BetterContinents
                     EnvMan.instance.m_debugTimeOfDay = true;
                     EnvMan.instance.m_debugTime = 0.5f;
                     Player.m_localPlayer.SetGodMode(true);
+                    GameCamera.instance.m_minWaterDistance = -1000f;
                 }
             }
         }

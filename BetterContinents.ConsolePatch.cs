@@ -19,14 +19,7 @@ namespace BetterContinents
                 if (AllowDebugActions)
                 {
                     string text = __instance.m_input.text.Trim();
-                    if (text == "bc" || text == "bc help")
-                    {
-                        DebugUtils.ShowHelp();
-                    }
-                    else if (DebugUtils.Subcommand(ref text, "bc"))
-                    {
-                        DebugUtils.RunConsoleCommand(text);
-                    }
+                    DebugUtils.RunConsoleCommand(text);
                 }
             }
         }

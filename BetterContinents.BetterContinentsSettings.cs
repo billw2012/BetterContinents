@@ -110,15 +110,15 @@ namespace BetterContinents
                 return copy;
             }
 
-            private static string CleanPath(string path) => path?.Replace("\\\"", "").Replace("\"", "").Trim();
+            public static string CleanPath(string path) => path?.Replace("\\\"", "").Replace("\"", "").Trim();
 
-            private static string GetPath(string folderFileName, string defaultFileName)
+            private static string GetPath(string projectDir, string projectDirFileName, string defaultFileName)
             {
-                if (!string.IsNullOrEmpty(ConfigMapSourceDir.Value))
+                if (!string.IsNullOrEmpty(projectDir))
                 {
-                    if (File.Exists(Path.Combine(ConfigMapSourceDir.Value, CleanPath(folderFileName))))
+                    if (File.Exists(Path.Combine(projectDir, CleanPath(projectDirFileName))))
                     {
-                        return Path.Combine(ConfigMapSourceDir.Value, CleanPath(folderFileName));
+                        return Path.Combine(projectDir, CleanPath(projectDirFileName));
                     }
                     else
                     {
@@ -129,14 +129,21 @@ namespace BetterContinents
                 return CleanPath(defaultFileName);
             }
 
-            private static string HeightmapPath() => GetPath("Heightmap.png", ConfigHeightmapFile.Value);
-            private static string BiomemapPath() => GetPath("Biomemap.png", ConfigBiomemapFile.Value);
-            private static string SpawnmapPath() => GetPath("Spawnmap.png", ConfigSpawnmapFile.Value);
-            private static string RoughmapPath() => GetPath("Roughmap.png", ConfigRoughmapFile.Value);
-            private static string FlatmapPath() => ConfigUseRoughInvertedForFlat.Value
+            private static readonly string HeightmapFilename = "Heightmap.png";
+            private static readonly string BiomemapFilename = "Biomemap.png";
+            private static readonly string SpawnmapFilename = "Spawnmap.png";
+            private static readonly string RoughmapFilename = "Roughmap.png";
+            private static readonly string FlatmapFilename = "Flatmap.png";
+            private static readonly string ForestmapFilename = "Forestmap.png";
+
+            private static string HeightmapPath(string defaultFilename, string projectDir) => GetPath(projectDir, HeightmapFilename, defaultFilename);
+            private static string BiomemapPath(string defaultFilename, string projectDir) => GetPath(projectDir, BiomemapFilename, defaultFilename);
+            private static string SpawnmapPath(string defaultFilename, string projectDir) => GetPath(projectDir, SpawnmapFilename, defaultFilename);
+            private static string RoughmapPath(string defaultFilename, string projectDir) => GetPath(projectDir, RoughmapFilename, defaultFilename);
+            private static string FlatmapPath(string defaultFilename, string projectDir) => ConfigUseRoughInvertedForFlat.Value
                 ? null
-                : GetPath("Flatmap.png", ConfigFlatmapFile.Value);
-            private static string ForestmapPath() => GetPath("Forestmap.png", ConfigForestmapFile.Value);
+                : GetPath(projectDir, FlatmapFilename, defaultFilename);
+            private static string ForestmapPath(string defaultFilename, string projectDir) => GetPath(projectDir, ForestmapFilename, defaultFilename);
             
             private void InitSettings(long worldUId, bool enabled)
             {
@@ -150,21 +157,21 @@ namespace BetterContinents
 
                 if (EnabledForThisWorld)
                 {
-                    GlobalScale = FeatureScaleCurve(ConfigContinentSize.Value);
-                    MountainsAmount = ConfigMountainsAmount.Value;
-                    SeaLevelAdjustment = Mathf.Lerp(0.25f, -0.25f, ConfigSeaLevelAdjustment.Value);
+                    SetContinentSize(ConfigContinentSize.Value);
+                    SetMountainsAmount(ConfigMountainsAmount.Value);
+                    SetSeaLevelAdjustment(ConfigSeaLevelAdjustment.Value);
 
-                    MaxRidgeHeight = ConfigMaxRidgeHeight.Value;
-                    RidgeScale = FeatureScaleCurve(ConfigRidgeSize.Value);
-                    RidgeBlendSigmoidB = Mathf.Lerp(-30f, -10f, ConfigRidgeBlend.Value);
-                    RidgeBlendSigmoidXOffset = Mathf.Lerp(1f, 0.35f, ConfigRidgeAmount.Value);
+                    SetMaxRidgeHeight(ConfigMaxRidgeHeight.Value);
+                    SetRidgeSize(ConfigRidgeSize.Value);
+                    SetRidgeBlend(ConfigRidgeBlend.Value);
+                    SetRidgeAmount(ConfigRidgeAmount.Value);
 
-                    var heightmapPath = HeightmapPath();
+                    var heightmapPath = HeightmapPath(ConfigHeightmapFile.Value, ConfigMapSourceDir.Value);
                     if (!string.IsNullOrEmpty(heightmapPath))
                     {
-                        HeightmapAmount = ConfigHeightmapAmount.Value;
-                        HeightmapBlend = ConfigHeightmapBlend.Value;
-                        HeightmapAdd = ConfigHeightmapAdd.Value;
+                        SetHeightmapAmount(ConfigHeightmapAmount.Value);
+                        SetHeightmapBlend(ConfigHeightmapBlend.Value);
+                        SetHeightmapAdd(ConfigHeightmapAdd.Value);
 
                         Heightmap = new ImageMapFloat(heightmapPath);
                         if (!Heightmap.LoadSourceImage() || !Heightmap.CreateMap())
@@ -173,7 +180,7 @@ namespace BetterContinents
                         }
                     }
 
-                    var biomemapPath = BiomemapPath();
+                    var biomemapPath = BiomemapPath(ConfigBiomemapFile.Value, ConfigMapSourceDir.Value);
                     if (!string.IsNullOrEmpty(biomemapPath))
                     {
                         Biomemap = new ImageMapBiome(biomemapPath);
@@ -183,19 +190,19 @@ namespace BetterContinents
                         }
                     }
 
-                    OceanChannelsEnabled = ConfigOceanChannelsEnabled.Value;
-                    RiversEnabled = ConfigRiversEnabled.Value;
+                    SetOceanChannelsEnabled(ConfigOceanChannelsEnabled.Value);
+                    SetRiversEnabled(ConfigRiversEnabled.Value);
 
-                    ForestScale = FeatureScaleCurve(ConfigForestScale.Value);
-                    ForestAmountOffset = Mathf.Lerp(1, -1, ConfigForestAmount.Value);
-                    ForestFactorOverrideAllTrees = ConfigForestFactorOverrideAllTrees.Value;
+                    SetForestScale(ConfigForestScale.Value);
+                    SetForestAmount(ConfigForestAmount.Value);
+                    SetForestFactorOverrideAllTrees(ConfigForestFactorOverrideAllTrees.Value);
 
-                    OverrideStartPosition = ConfigOverrideStartPosition.Value;
-                    StartPositionX = ConfigStartPositionX.Value;
-                    StartPositionY = ConfigStartPositionY.Value;
+                    SetOverrideStartPosition(ConfigOverrideStartPosition.Value);
+                    SetStartPositionX(ConfigStartPositionX.Value);
+                    SetStartPositionY(ConfigStartPositionY.Value);
                     //LakesEnabled = ConfigLakesEnabled.Value;
                     
-                    var spawnmapPath = SpawnmapPath();
+                    var spawnmapPath = SpawnmapPath(ConfigSpawnmapFile.Value, ConfigMapSourceDir.Value);
                     if (!string.IsNullOrEmpty(spawnmapPath))
                     {
                         Spawnmap = new ImageMapSpawn(spawnmapPath);
@@ -205,10 +212,10 @@ namespace BetterContinents
                         }
                     }
 
-                    var roughmapPath = RoughmapPath();
+                    var roughmapPath = RoughmapPath(ConfigRoughmapFile.Value, ConfigMapSourceDir.Value);
                     if (!string.IsNullOrEmpty(roughmapPath))
                     {
-                        RoughmapBlend = ConfigRoughmapBlend.Value;
+                        SetRoughmapBlend(ConfigRoughmapBlend.Value);
                         
                         Roughmap = new ImageMapFloat(roughmapPath);
                         if (!Roughmap.LoadSourceImage() || !Roughmap.CreateMap())
@@ -217,12 +224,12 @@ namespace BetterContinents
                         }
                     }
 
-                    var flatmapPath = FlatmapPath();
+                    var flatmapPath = FlatmapPath(ConfigFlatmapFile.Value, ConfigMapSourceDir.Value);
                     if (ConfigUseRoughInvertedForFlat.Value && Roughmap != null ||
                         !ConfigUseRoughInvertedForFlat.Value && !string.IsNullOrEmpty(flatmapPath))
                     {
-                        UseRoughInvertedAsFlat = ConfigUseRoughInvertedForFlat.Value;
-                        FlatmapBlend = ConfigFlatmapBlend.Value;
+                        SetUseRoughInvertedForFlat(ConfigUseRoughInvertedForFlat.Value);
+                        SetFlatmapBlend(ConfigFlatmapBlend.Value);
                         if (!string.IsNullOrEmpty(flatmapPath) && !UseRoughInvertedAsFlat)
                         {
                             Flatmap = new ImageMapFloat(flatmapPath);
@@ -233,11 +240,11 @@ namespace BetterContinents
                         }
                     }
                     
-                    var forestmapPath = ForestmapPath();
+                    var forestmapPath = ForestmapPath(ConfigForestmapFile.Value, ConfigMapSourceDir.Value);
                     if (!string.IsNullOrEmpty(forestmapPath))
                     {
-                        ForestmapAdd = ConfigForestmapAdd.Value;
-                        ForestmapMultiply = ConfigForestmapMultiply.Value;
+                        SetForestmapAdd(ConfigForestmapAdd.Value);
+                        SetForestmapMultiply(ConfigForestmapMultiply.Value);
                         
                         Forestmap = new ImageMapFloat(forestmapPath);
                         if (!Forestmap.LoadSourceImage() || !Forestmap.CreateMap())
@@ -246,121 +253,252 @@ namespace BetterContinents
                         }
                     }
 
-                    DisableMapEdgeDropoff = !ConfigMapEdgeDropoff.Value;
-                    MountainsAllowedAtCenter = ConfigMountainsAllowedAtCenter.Value;
+                    SetMapEdgeDropoff(ConfigMapEdgeDropoff.Value);
+                    SetMountainsAllowedAtCenter(ConfigMountainsAllowedAtCenter.Value);
+                }
+            }
+
+            public void SetContinentSize(float continentSize) => GlobalScale = FeatureScaleCurve(continentSize);
+            public void SetMountainsAmount(float mountainsAmount) => MountainsAmount = mountainsAmount;
+            public void SetSeaLevelAdjustment(float seaLevelAdjustment) => SeaLevelAdjustment = Mathf.Lerp(0.25f, -0.25f, seaLevelAdjustment);
+            public void SetOceanChannelsEnabled(bool oceanChannelsEnabled) => OceanChannelsEnabled = oceanChannelsEnabled;
+            public void SetRiversEnabled(bool riversEnabled) => RiversEnabled = riversEnabled;
+            public void SetMapEdgeDropoff(bool mapEdgeDropoff) => DisableMapEdgeDropoff = !mapEdgeDropoff;
+            public void SetMountainsAllowedAtCenter(bool mountainsAllowedAtCenter) => MountainsAllowedAtCenter = mountainsAllowedAtCenter;
+            
+            public void SetHeightmapAmount(float heightmapAmount) => HeightmapAmount = heightmapAmount;
+            public void SetHeightmapBlend(float heightmapBlend) => HeightmapBlend = heightmapBlend;
+            public void SetHeightmapAdd(float heightmapAdd) => HeightmapAdd = heightmapAdd;
+            
+            public void SetRoughmapBlend(float roughmapBlend) => RoughmapBlend = roughmapBlend;
+
+            public void SetUseRoughInvertedForFlat(bool useRoughInvertedAsFlat) => UseRoughInvertedAsFlat = useRoughInvertedAsFlat;
+            public void SetFlatmapBlend(float flatmapBlend) => FlatmapBlend = flatmapBlend;
+
+            public void SetForestScale(float forestScale) => ForestScale = FeatureScaleCurve(forestScale);
+            public void SetForestAmount(float forestAmount) => ForestAmountOffset = Mathf.Lerp(1, -1, forestAmount);
+            public void SetForestFactorOverrideAllTrees(bool forestFactorOverrideAllTrees) => ForestFactorOverrideAllTrees = forestFactorOverrideAllTrees;
+            public void SetForestmapMultiply(float forestmapMultiply) => ForestmapMultiply = forestmapMultiply;
+            public void SetForestmapAdd(float forestmapAdd) => ForestmapAdd = forestmapAdd;
+            
+            public void SetMaxRidgeHeight(float maxRidgeHeight) => MaxRidgeHeight = maxRidgeHeight;
+            public void SetRidgeSize(float ridgeSize) => RidgeScale = FeatureScaleCurve(ridgeSize);
+            public void SetRidgeBlend(float ridgeBlend) => RidgeBlendSigmoidB = Mathf.Lerp(-30f, -10f, ridgeBlend);
+            public void SetRidgeAmount(float ridgeAmount) => RidgeBlendSigmoidXOffset = Mathf.Lerp(1f, 0.35f, ridgeAmount);
+
+            public void SetOverrideStartPosition(bool overrideStartPosition) => OverrideStartPosition = overrideStartPosition;
+            public void SetStartPositionX(float startPositionX) => StartPositionX = startPositionX;
+            public void SetStartPositionY(float startPositionY) => StartPositionY = startPositionY;
+
+            public void SetHeightmapPath(string path, string projectDir = null)
+            {
+                var finalPath = HeightmapPath(path, projectDir);
+                if (!string.IsNullOrEmpty(finalPath))
+                {
+                    Heightmap = new ImageMapFloat(finalPath);
+                    if (!Heightmap.LoadSourceImage() || !Heightmap.CreateMap())
+                    {
+                        Heightmap = null;
+                    }
+                }
+                else
+                {
+                    Heightmap = null;
+                }
+            }
+            public void SetBiomemapPath(string path, string projectDir = null)
+            {
+                var finalPath = BiomemapPath(path, projectDir);
+                if (!string.IsNullOrEmpty(finalPath))
+                {
+                    Biomemap = new ImageMapBiome(finalPath);
+                    if (!Biomemap.LoadSourceImage() || !Biomemap.CreateMap())
+                    {
+                        Biomemap = null;
+                    }
+                }
+                else
+                {
+                    Biomemap = null;
+                }
+            }
+            public void SetSpawnmapPath(string path, string projectDir = null)
+            {
+                var finalPath = SpawnmapPath(path, projectDir);
+                if (!string.IsNullOrEmpty(finalPath))
+                {
+                    Spawnmap = new ImageMapSpawn(finalPath);
+                    if (!Spawnmap.LoadSourceImage() || !Spawnmap.CreateMap())
+                    {
+                        Spawnmap = null;
+                    }
+                }
+                else
+                {
+                    Spawnmap = null;
+                }
+            }
+            public void SetRoughmapPath(string path, string projectDir = null)
+            {
+                var finalPath = RoughmapPath(path, projectDir);
+                if (!string.IsNullOrEmpty(finalPath))
+                {
+                    Roughmap = new ImageMapFloat(finalPath);
+                    if (!Roughmap.LoadSourceImage() || !Roughmap.CreateMap())
+                    {
+                        Roughmap = null;
+                    }
+                }
+                else
+                {
+                    Roughmap = null;
+                }
+            }
+            public void SetFlatmapPath(string path, string projectDir = null)
+            {
+                var finalPath = FlatmapPath(path, projectDir);
+                if (!string.IsNullOrEmpty(finalPath) && !UseRoughInvertedAsFlat)
+                {
+                    Flatmap = new ImageMapFloat(finalPath);
+                    if (!Flatmap.LoadSourceImage() || !Flatmap.CreateMap())
+                    {
+                        Flatmap = null;
+                    }
+                }
+                else
+                {
+                    Flatmap = null;
+                }
+            }
+            public void SetForestmapPath(string path, string projectDir = null)
+            {
+                var finalPath = ForestmapPath(path, projectDir);
+                if (!string.IsNullOrEmpty(finalPath))
+                {
+                    Forestmap = new ImageMapFloat(finalPath);
+                    if (!Forestmap.LoadSourceImage() || !Forestmap.CreateMap())
+                    {
+                        Forestmap = null;
+                    }
+                }
+                else
+                {
+                    Forestmap = null;
                 }
             }
 
             private static float FeatureScaleCurve(float x) => ScaleRange(Gamma(x, 0.726965071031f), 0.2f, 3f);
+
             private static float Gamma(float x, float h) => Mathf.Pow(x, Mathf.Pow(1 - h * 0.5f + 0.25f, 6f));
             private static float ScaleRange(float g, float n, float m) => n + (m - n) * (1 - g); 
 
-            public void Dump()
+            public void Dump(Action<string> output = null)
             {
-                Log($"Version {Version}");
-                Log($"WorldUId {WorldUId}");
+                output = output ?? Log;
+                output($"Version {Version}");
+                output($"WorldUId {WorldUId}");
                 
                 if (EnabledForThisWorld)
                 {
-                    Log($"GlobalScale {GlobalScale}");
-                    Log($"MountainsAmount {MountainsAmount}");
-                    Log($"SeaLevelAdjustment {SeaLevelAdjustment}");
-                    Log($"OceanChannelsEnabled {OceanChannelsEnabled}");
-                    Log($"RiversEnabled {RiversEnabled}");
+                    output($"GlobalScale {GlobalScale}");
+                    output($"MountainsAmount {MountainsAmount}");
+                    output($"SeaLevelAdjustment {SeaLevelAdjustment}");
+                    output($"OceanChannelsEnabled {OceanChannelsEnabled}");
+                    output($"RiversEnabled {RiversEnabled}");
                     
-                    Log($"DisableMapEdgeDropoff {DisableMapEdgeDropoff}");
-                    Log($"MountainsAllowedAtCenter {MountainsAllowedAtCenter}");
+                    output($"DisableMapEdgeDropoff {DisableMapEdgeDropoff}");
+                    output($"MountainsAllowedAtCenter {MountainsAllowedAtCenter}");
                     
                     if (Heightmap != null)
                     {
-                        Log($"Heightmap file {Heightmap.FilePath}");
-                        Log($"Heightmap size {Heightmap.Size}x{Heightmap.Size}, amount {HeightmapAmount}, blend {HeightmapBlend}, add {HeightmapAdd}");
+                        output($"Heightmap file {Heightmap.FilePath}");
+                        output($"Heightmap size {Heightmap.Size}x{Heightmap.Size}, amount {HeightmapAmount}, blend {HeightmapBlend}, add {HeightmapAdd}");
                     }
                     else
                     {
-                        Log($"Heightmap disabled");
+                        output($"Heightmap disabled");
                     }
 
                     if (Biomemap != null)
                     {
-                        Log($"Biomemap file {Biomemap.FilePath}");
-                        Log($"Biomemap size {Biomemap.Size}x{Biomemap.Size}");
+                        output($"Biomemap file {Biomemap.FilePath}");
+                        output($"Biomemap size {Biomemap.Size}x{Biomemap.Size}");
                     }
                     else
                     {
-                        Log($"Biomemap disabled");
+                        output($"Biomemap disabled");
                     }
                     
                     if (Spawnmap != null)
                     {
-                        Log($"Spawnmap file {Spawnmap.FilePath}");
-                        Log($"Spawnmap includes spawns for {Spawnmap.RemainingSpawnAreas.Count} types");
+                        output($"Spawnmap file {Spawnmap.FilePath}");
+                        output($"Spawnmap includes spawns for {Spawnmap.RemainingSpawnAreas.Count} types");
                     }
                     else
                     {
-                        Log($"Spawnmap disabled");
+                        output($"Spawnmap disabled");
                     }
                     
                     if (Roughmap != null)
                     {
-                        Log($"Roughmap file {Roughmap.FilePath}");
-                        Log($"Roughmap size {Roughmap.Size}x{Roughmap.Size}, blend {RoughmapBlend}");
+                        output($"Roughmap file {Roughmap.FilePath}");
+                        output($"Roughmap size {Roughmap.Size}x{Roughmap.Size}, blend {RoughmapBlend}");
                     }
                     else
                     {
-                        Log($"Roughmap disabled");
+                        output($"Roughmap disabled");
                     }
 
                     if (UseRoughInvertedAsFlat)
                     {
-                        Log($"Using inverted Roughmap as Flatmap");
+                        output($"Using inverted Roughmap as Flatmap");
                     }
                     else
                     {
                         if (Flatmap != null)
                         {
-                            Log($"Flatmap file {Flatmap.FilePath}");
-                            Log($"Flatmap size {Flatmap.Size}x{Flatmap.Size}, blend {FlatmapBlend}");
+                            output($"Flatmap file {Flatmap.FilePath}");
+                            output($"Flatmap size {Flatmap.Size}x{Flatmap.Size}, blend {FlatmapBlend}");
                         }
                         else
                         {
-                            Log($"Flatmap disabled");
+                            output($"Flatmap disabled");
                         }
                     }
                     
-                    Log($"ForestScale {ForestScale}");
-                    Log($"ForestAmountOffset {ForestAmountOffset}");
+                    output($"ForestScale {ForestScale}");
+                    output($"ForestAmountOffset {ForestAmountOffset}");
                     if (Forestmap != null)
                     {
-                        Log($"Forestmap file {Forestmap.FilePath}");
-                        Log($"Forestmap size {Forestmap.Size}x{Forestmap.Size}, multiply {ForestmapMultiply}, add {ForestmapAdd}");
+                        output($"Forestmap file {Forestmap.FilePath}");
+                        output($"Forestmap size {Forestmap.Size}x{Forestmap.Size}, multiply {ForestmapMultiply}, add {ForestmapAdd}");
                         if (ForestFactorOverrideAllTrees)
                         {
-                            Log($"Forest Factor overrides all trees");
+                            output($"Forest Factor overrides all trees");
                         }
                         else
                         {
-                            Log($"Forest Factor applies only to the same trees as vanilla");
+                            output($"Forest Factor applies only to the same trees as vanilla");
                         }
                     }
                     else
                     {
-                        Log($"Forestmap disabled");
+                        output($"Forestmap disabled");
                     }
                     
-                    Log($"MaxRidgeHeight {MaxRidgeHeight}");
-                    Log($"RidgeScale {RidgeScale}");
-                    Log($"RidgeBlendSigmoidB {RidgeBlendSigmoidB}");
-                    Log($"RidgeBlendSigmoidXOffset {RidgeBlendSigmoidXOffset}");
+                    output($"MaxRidgeHeight {MaxRidgeHeight}");
+                    output($"RidgeScale {RidgeScale}");
+                    output($"RidgeBlendSigmoidB {RidgeBlendSigmoidB}");
+                    output($"RidgeBlendSigmoidXOffset {RidgeBlendSigmoidXOffset}");
 
                     if (OverrideStartPosition)
                     {
-                        Log($"StartPosition {StartPositionX}, {StartPositionY}");
+                        output($"StartPosition {StartPositionX}, {StartPositionY}");
                     }
                 }
                 else
                 {
-                    Log($"DISABLED");
+                    output($"DISABLED");
                 }
             }
 
