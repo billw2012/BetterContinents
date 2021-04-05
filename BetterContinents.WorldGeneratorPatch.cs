@@ -1,4 +1,5 @@
-﻿using System.Collections.Generic;
+﻿using System.Collections.Concurrent;
+using System.Collections.Generic;
 using System.Linq;
 using HarmonyLib;
 using UnityEngine;
@@ -12,8 +13,8 @@ namespace BetterContinents
         public class WorldGeneratorPatch
         {
             // The base map x, y coordinates in 0..1 range
-            private static Dictionary<Vector2, float> cachedHeights;
-            private static bool cacheEnabled = true;
+            private static ConcurrentDictionary<Vector2, float> cachedHeights;
+            private static int cacheEnabled = 1;
 
             private static readonly string[] TreePrefixes =
             {
@@ -35,7 +36,7 @@ namespace BetterContinents
             [HarmonyPrefix, HarmonyPatch(nameof(WorldGenerator.Initialize))]
             private static void InitializePrefix(World world)
             {
-                cachedHeights = new Dictionary<Vector2, float>(100000);
+                cachedHeights = new ConcurrentDictionary<Vector2, float>(1, 100100);
                 
                 if(Settings.EnabledForThisWorld && !world.m_menu && Settings.ForestFactorOverrideAllTrees && ZoneSystem.instance != null)
                 {
@@ -53,11 +54,14 @@ namespace BetterContinents
                 }
             }
 
-            public static void DisableCache() => cacheEnabled = false;
+            public static void DisableCache() => cacheEnabled--;
             public static void EnableCache()
             {
-                cacheEnabled = true;
-                cachedHeights.Clear();
+                cacheEnabled++;
+                if (cacheEnabled == 1)
+                {
+                    cachedHeights.Clear();
+                }
             }
 
             // wx, wy are [-10500, 10500]
@@ -70,7 +74,7 @@ namespace BetterContinents
                     return true;
                 }
                 
-                if (cacheEnabled && cachedHeights.TryGetValue(new Vector2(wx, wy), out __result))
+                if (cacheEnabled == 1 && cachedHeights.TryGetValue(new Vector2(wx, wy), out __result))
                 {
                     return false;
                 }
@@ -99,7 +103,7 @@ namespace BetterContinents
                     return;
                 }
 
-                if (cacheEnabled)
+                if (cacheEnabled == 1)
                 {
                     if (cachedHeights.Count >= 100000)
                     {
@@ -107,8 +111,8 @@ namespace BetterContinents
                         cachedHeights.Clear();
                     }
 
-                    // Do this AFTER clearing so we have it available below
-                    cachedHeights[new Vector2(wx, wy)] = __result;
+                    // Do this AFTER clearing so we have the latest value available (hopefully, concurrency means its still not guaranteed)
+                    cachedHeights.TryAdd(new Vector2(wx, wy), __result);
                 }
             }
             
@@ -125,7 +129,7 @@ namespace BetterContinents
                 }
 
                 float smoothHeight = GetBaseHeightMethod(__instance, wx, wy, false) * 200f;
-                __result = Settings.ApplyRoughmap(WorldX(wx), WorldY(wy), smoothHeight, __result);
+                __result = Settings.ApplyRoughmap(NormalizedX(wx), NormalizedY(wy), smoothHeight, __result);
             }
 
             private static float GetBaseHeightV1(float wx, float wy, float ___m_offset0, float ___m_offset1, float ___m_minMountainDistance)

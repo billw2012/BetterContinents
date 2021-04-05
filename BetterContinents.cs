@@ -80,9 +80,13 @@ namespace BetterContinents
                                                 Settings.EnabledForThisWorld && ConfigDebugModeEnabled.Value;
 
         public static BetterContinentsSettings Settings;
+
+        public static BetterContinents instance;
         
         private void Awake()
         {
+            instance = this;
+            
             // Cos why...
             Application.SetStackTraceLogType(LogType.Log, StackTraceLogType.None);
             // Application.SetStackTraceLogType(LogType.Warning, StackTraceLogType.None);

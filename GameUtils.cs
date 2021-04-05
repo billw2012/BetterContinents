@@ -1,9 +1,15 @@
-﻿using System.Collections;
+﻿using System;
+using System.Collections;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.IO;
 using System.Linq;
+using System.Threading.Tasks;
 using HarmonyLib;
+using Unity.Jobs;
 using UnityEngine;
+using UnityEngine.UI;
+using Object = UnityEngine.Object;
 
 namespace BetterContinents
 {
@@ -24,147 +30,28 @@ namespace BetterContinents
             BetterContinents.Log($"Regenerating heightmaps took {sw.ElapsedMilliseconds} ms");
         }
 
+        private static void RegenerateDistantLod()
+        {
+            foreach (var lod in Object.FindObjectsOfType<TerrainLod>())
+            {
+                lod.m_needRebuild = true;
+                lod.m_hmap.m_buildData = null;
+            }
+        }
+
         private static Dictionary<ZDOID, ZDO> GetObjectsByID() => ZDOMan.instance.m_objectsByID;
-
-        //(Dictionary<ZDOID, ZDO>) AccessTools.Field(typeof(ZDOMan), "m_objectsByID").GetValue(ZDOMan.instance);
-
-        // private static Dictionary<ZDO, float> zdos;
-        // private static Dictionary<ZNetView, float> zNetViews;
-        // private static Dictionary<LocationProxy, float> locations;
-            
+        
         public static void BeginHeightChanges()
         {
-            // // Get all the ZoneVegetation
-            // var allVegetation = new List<ZoneSystem.ZoneVegetation>();
-            // ZoneSystem.instance.GetVegetation((Heightmap.Biome) 0x7fffffff, allVegetation);
-            //
-            // // Get the prefabs of all Spawners
-            // var allSpawns = Object.FindObjectsOfType<SpawnSystem>()
-            //     .SelectMany(s => s.m_spawners)
-            //     .Select(s => s.m_prefab);
-            //
-            // // Convert the prefabs of Vegetation and Spawners into their hash ids, which is what the ZDOs save
-            // var prefabIds = allVegetation
-            //     .Select(v => v.m_prefab)
-            //     .Concat(allSpawns)
-            //     .Select(p => p?.GetComponentInChildren<ZNetView>()?.GetPrefabName()?.GetStableHashCode())
-            //     .Where(h => h != null)
-            //     .Select(h => h.Value)
-            //     .ToHashSet();
-            
             // Stop and reset the heightmap generator first
             HeightmapBuilder.instance.Dispose();
             var _ = new HeightmapBuilder();
-
-            // // Collect all ZDOs of types we want to update in the world, we won't modify others
-            // zdos = GetObjectsByID().Values
-            //     .Where(z => prefabIds.Contains(z.GetPrefab()))
-            //     .ToDictionary(zdo => zdo, zdo =>
-            //     {
-            //         var pos = zdo.GetPosition();
-            //         return pos.y - WorldGenerator.instance.GetHeight(pos.x, pos.z);
-            //     });
-            
-            // locations = Resources.FindObjectsOfTypeAll<LocationProxy>().ToDictionary(tm => tm, tm =>
-            // {
-            //     var pos = tm.transform.position;
-            //     var terrainHeight = WorldGenerator.instance.GetHeight(pos.x, pos.z);
-            //     var height = pos.y - terrainHeight;
-            //     BetterContinents.Log($"Found location {tm} at position {pos} terrainHeight {terrainHeight} height {height}");
-            //     return height;
-            // });
-            
-            // // Get vegetation zNetViews only (or ones without zdos, which are just clutter)
-            // zNetViews = Object.FindObjectsOfType<ZNetView>()
-            //     .Where(z => z.GetZDO() == null || prefabIds.Contains(z.GetZDO().GetPrefab()))
-            //     .ToDictionary(z => z, z =>
-            //     {
-            //         var pos = z.transform.position;
-            //         if (Heightmap.GetHeight(pos, out float height))
-            //         {
-            //             return pos.y - height;
-            //         }
-            //         else
-            //         {
-            //             return pos.y - WorldGenerator.instance.GetHeight(pos.x, pos.z);    
-            //         }
-            //     });
-            
             BetterContinents.WorldGeneratorPatch.DisableCache();
         }
 
         public static void EndHeightChanges()
         {
             BetterContinents.WorldGeneratorPatch.EnableCache();
-            
-            // foreach (var kv in locations)
-            // {
-            //     var lp = kv.Key;
-            //     var pos = lp.transform.position;
-            //     var terrainHeight = WorldGenerator.instance.GetHeight(pos.x, pos.z);
-            //     pos.y = terrainHeight + kv.Value;
-            //     lp.transform.position = pos;
-            //     BetterContinents.Log($"Updated location {lp} to position {pos} terrainHeight {terrainHeight}");
-            //     foreach (var z in lp.GetComponentsInChildren<ZNetView>().Where(z => z.GetZDO() != null))
-            //     {
-            //         z.GetZDO().SetPosition(z.transform.position);
-            //         zdos.Remove(z.GetZDO());
-            //         BetterContinents.Log($"Updated location {lp} ZDO {z}");
-            //         zNetViews.Remove(z);
-            //     }
-            // }
-            
-            // foreach (var obj in Resources.FindObjectsOfTypeAll<TerrainModifier>()
-            //     .Select(t => t.GetComponent<ZNetView>())
-            //     .Where(z => z != null && z.transform != null && z.GetZDO() != null))
-            // {
-            //     obj.transform.position = obj.GetZDO().GetPosition();
-            // }
-            
-            // Do this AFTER we have updated the terrain effectors above.
-            GameUtils.RegenerateHeightmaps();
-
-            // DespawnAll();
-            //
-            // // foreach (var kv in zNetViews)
-            // // {
-            // //     var z = kv.Key;
-            // //     var pos = z.transform.position;
-            // //     if (Heightmap.GetHeight(pos, out float height))
-            // //     {
-            // //         pos.y = height + kv.Value;
-            // //     }
-            // //     else
-            // //     {
-            // //         pos.y = WorldGenerator.instance.GetHeight(pos.x, pos.z) + kv.Value;    
-            // //     }
-            // //
-            // //     z.transform.position = pos;
-            // //     // Override the rough position from the zdos above with our more accurate one
-            // //     if (z.GetZDO() != null)
-            // //     {
-            // //         z.GetZDO().SetPosition(pos);
-            // //         zdos.Remove(z.GetZDO());
-            // //     }
-            // // }
-            //
-            // // Lastly we will update any valid ZDOs we haven't already updated above
-            // foreach (var kv in zdos)
-            // {
-            //     var zdo = kv.Key;
-            //     var pos = zdo.GetPosition();
-            //     pos.y = WorldGenerator.instance.GetHeight(pos.x, pos.z) + kv.Value;
-            //     zdo.SetPosition(pos);
-            // }
-
-            // Update the grass etc.
-            
-            // AccessTools.Method(typeof(ClutterSystem), "ClearAll").Invoke(ClutterSystem.instance, new object[]{});
-            // UpdateZNetViewHeights();
-
-            // DeleteTaggedZDOs();
-            // ResetLocationInstances();
-
             Refresh();
         }
 
@@ -175,8 +62,9 @@ namespace BetterContinents
             ClutterSystem.instance.ClearAll();
             DeleteAllTaggedZDOs();
             ResetLocationInstances();
-
-            Minimap.instance.ForceRegen();
+            RegenerateDistantLod();
+            
+            FastMinimapRegen();
         }
 
         public static void RegenerateLocations()
@@ -189,6 +77,160 @@ namespace BetterContinents
 
             ZoneSystem.instance.GenerateLocations();
             ResetLocPins();
+        }
+
+        private static int MinimapOrigTextureSize = 0;
+        private static float MinimapOrigPixelSize = 0;
+
+        public static void SetMinimapDownscalingPower(int pwr)
+            => MinimapDownscaling = (int) Mathf.Pow(2, Mathf.Clamp(pwr, 0, 3));
+
+        private static int MinimapDownscaling = 4;
+
+        public static void FastMinimapRegen()
+        {
+            if (MinimapOrigTextureSize == 0 
+                || Minimap.instance.m_textureSize != MinimapOrigTextureSize / MinimapDownscaling)
+            {
+                if(MinimapOrigTextureSize == 0)
+                {
+                    MinimapOrigTextureSize = Minimap.instance.m_textureSize;
+                    MinimapOrigPixelSize = Minimap.instance.m_pixelSize;
+                }
+                Minimap.instance.m_textureSize = MinimapOrigTextureSize / MinimapDownscaling;
+                Minimap.instance.m_pixelSize = MinimapOrigPixelSize * MinimapDownscaling;
+                Minimap.instance.m_mapTexture = new Texture2D(Minimap.instance.m_textureSize, Minimap.instance.m_textureSize, TextureFormat.RGBA32, false);
+                Minimap.instance.m_mapTexture.wrapMode = TextureWrapMode.Clamp;
+                Minimap.instance.m_forestMaskTexture = new Texture2D(Minimap.instance.m_textureSize, Minimap.instance.m_textureSize, TextureFormat.RGBA32, false);
+                Minimap.instance.m_forestMaskTexture.wrapMode = TextureWrapMode.Clamp;
+                Minimap.instance.m_heightTexture = new Texture2D(Minimap.instance.m_textureSize, Minimap.instance.m_textureSize, TextureFormat.RFloat, false);
+                Minimap.instance.m_heightTexture.wrapMode = TextureWrapMode.Clamp;
+                Minimap.instance.m_fogTexture = new Texture2D(Minimap.instance.m_textureSize, Minimap.instance.m_textureSize, TextureFormat.RGBA32, false);
+                Minimap.instance.m_fogTexture.wrapMode = TextureWrapMode.Clamp;
+                Minimap.instance.m_explored = new bool[Minimap.instance.m_textureSize * Minimap.instance.m_textureSize];
+                Minimap.instance.m_mapImageLarge.material = UnityEngine.Object.Instantiate<Material>(Minimap.instance.m_mapImageLarge.material);
+                Minimap.instance.m_mapImageSmall.material = UnityEngine.Object.Instantiate<Material>(Minimap.instance.m_mapImageSmall.material);
+                Minimap.instance.m_mapImageLarge.material.SetTexture("_MainTex", Minimap.instance.m_mapTexture);
+                Minimap.instance.m_mapImageLarge.material.SetTexture("_MaskTex", Minimap.instance.m_forestMaskTexture);
+                Minimap.instance.m_mapImageLarge.material.SetTexture("_HeightTex", Minimap.instance.m_heightTexture);
+                Minimap.instance.m_mapImageLarge.material.SetTexture("_FogTex", Minimap.instance.m_fogTexture);
+                Minimap.instance.m_mapImageSmall.material.SetTexture("_MainTex", Minimap.instance.m_mapTexture);
+                Minimap.instance.m_mapImageSmall.material.SetTexture("_MaskTex", Minimap.instance.m_forestMaskTexture);
+                Minimap.instance.m_mapImageSmall.material.SetTexture("_HeightTex", Minimap.instance.m_heightTexture);
+                Minimap.instance.m_mapImageSmall.material.SetTexture("_FogTex", Minimap.instance.m_fogTexture);
+            }
+            Minimap.instance.ForceRegen();
+            Minimap.instance.ExploreAll();
+        }
+
+        public static string GetScreenShotDir() => Path.Combine(Utils.GetSaveDataPath(), "BetterContinents", WorldGenerator.instance.m_world.m_name);
+
+        public static void SaveMinimap(int size)
+        {
+            BetterContinents.instance.StartCoroutine(SaveMinimapImpl(size));
+        }
+
+        private static GameObject CreateQuad(float width, float height, float z, Material material)
+        {
+            var gameObject = new GameObject();
+            MeshRenderer meshRenderer = gameObject.AddComponent<MeshRenderer>();
+            meshRenderer.sharedMaterial = material;//new Material(Shader.Find("Standard"));
+
+            MeshFilter meshFilter = gameObject.AddComponent<MeshFilter>();
+
+            Mesh mesh = new Mesh();
+
+            Vector3[] vertices = new Vector3[4]
+            {
+                new Vector3(-width / 2, -height / 2, z),
+                new Vector3(width / 2, -height / 2, z),
+                new Vector3(-width / 2, height / 2, z),
+                new Vector3(width / 2, height / 2, z)
+            };
+            mesh.vertices = vertices;
+
+            int[] tris = new int[6]
+            {
+                // lower left triangle
+                0, 2, 1,
+                // upper right triangle
+                2, 3, 1
+            };
+            mesh.triangles = tris;
+
+            Vector3[] normals = new Vector3[4]
+            {
+                -Vector3.forward,
+                -Vector3.forward,
+                -Vector3.forward,
+                -Vector3.forward
+            };
+            mesh.normals = normals;
+
+            Vector2[] uv = new Vector2[4]
+            {
+                new Vector2(0, 0),
+                new Vector2(1, 0),
+                new Vector2(0, 1),
+                new Vector2(1, 1)
+            };
+            mesh.uv = uv;
+
+            meshFilter.mesh = mesh;
+
+            return gameObject;
+        }
+        
+        private static IEnumerator SaveMinimapImpl(int size)
+        {
+            bool wasLarge = Minimap.instance.m_largeRoot.activeSelf;
+            if (!wasLarge)
+            {
+                Minimap.instance.SetMapMode(Minimap.MapMode.Large);
+                Minimap.instance.CenterMap(Vector3.zero);
+            }
+
+            var mapPanelObject = CreateQuad(100, 100, 10, Minimap.instance.m_mapImageLarge.material);
+
+            mapPanelObject.layer = 19;
+
+            var renderTexture = new RenderTexture(size, size, 24);
+            var cameraObject = new GameObject();
+            cameraObject.layer = 19;
+            var camera = cameraObject.AddComponent<Camera>();
+            camera.targetTexture = renderTexture;
+            camera.orthographic = true;
+            camera.rect = new Rect(0, 0, renderTexture.width, renderTexture.height); 
+            camera.nearClipPlane = 0;
+            camera.farClipPlane = 100;
+            camera.orthographicSize = 50;
+            camera.cullingMask = 1 << 19;
+            camera.Render();
+            
+            yield return new WaitForEndOfFrame();
+
+            RenderTexture.active = renderTexture;
+            var tex = new Texture2D(renderTexture.width, renderTexture.height, TextureFormat.RGB24, false);
+            tex.ReadPixels(new Rect(0, 0, tex.width, tex.height), 0, 0);
+            tex.Apply();
+            RenderTexture.active = null;
+
+            var filename = DateTime.Now.ToString("yyyy-dd-M-HH-mm-ss") + ".png";
+            var path = Path.Combine(GetScreenShotDir(), filename);
+            Directory.CreateDirectory(Path.GetDirectoryName(path));
+            Console.instance.Print($"Screenshot of minimap saved to {path}");
+            
+            File.WriteAllBytes(path, ImageConversion.EncodeToPNG(tex));
+
+            Object.Destroy(mapPanelObject);
+            Object.Destroy(cameraObject);
+            Object.Destroy(renderTexture);
+            Object.Destroy(tex);
+            
+            if (!wasLarge)
+            {
+                Minimap.instance.SetMapMode(Minimap.MapMode.Small);
+            }
         }
 
         private static void ResetLocPins()

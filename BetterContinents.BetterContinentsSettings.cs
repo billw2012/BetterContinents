@@ -82,7 +82,7 @@ namespace BetterContinents
             
             public bool OverrideBiomes => this.Biomemap != null;
             public bool UseSpawnmap => this.Spawnmap != null;
-            public bool UseRoughmap => this.Roughmap != null && this.RoughmapBlend > 0;
+            public bool UseRoughmap => this.Roughmap != null;
             
             public static BetterContinentsSettings Create(long worldUId)
             {
@@ -109,8 +109,6 @@ namespace BetterContinents
                 if(copy.Forestmap != null) copy.Forestmap.FilePath = "(forestmap)";
                 return copy;
             }
-
-            public static string CleanPath(string path) => path?.Replace("\\\"", "").Replace("\"", "").Trim();
 
             private static string GetPath(string projectDir, string projectDirFileName, string defaultFileName)
             {
@@ -140,9 +138,7 @@ namespace BetterContinents
             private static string BiomemapPath(string defaultFilename, string projectDir) => GetPath(projectDir, BiomemapFilename, defaultFilename);
             private static string SpawnmapPath(string defaultFilename, string projectDir) => GetPath(projectDir, SpawnmapFilename, defaultFilename);
             private static string RoughmapPath(string defaultFilename, string projectDir) => GetPath(projectDir, RoughmapFilename, defaultFilename);
-            private static string FlatmapPath(string defaultFilename, string projectDir) => ConfigUseRoughInvertedForFlat.Value
-                ? null
-                : GetPath(projectDir, FlatmapFilename, defaultFilename);
+            private static string FlatmapPath(string defaultFilename, string projectDir) => GetPath(projectDir, FlatmapFilename, defaultFilename);
             private static string ForestmapPath(string defaultFilename, string projectDir) => GetPath(projectDir, ForestmapFilename, defaultFilename);
             
             private void InitSettings(long worldUId, bool enabled)
@@ -224,7 +220,7 @@ namespace BetterContinents
                         }
                     }
 
-                    var flatmapPath = FlatmapPath(ConfigFlatmapFile.Value, ConfigMapSourceDir.Value);
+                    var flatmapPath = ConfigUseRoughInvertedForFlat.Value ? null : FlatmapPath(ConfigFlatmapFile.Value, ConfigMapSourceDir.Value);
                     if (ConfigUseRoughInvertedForFlat.Value && Roughmap != null ||
                         !ConfigUseRoughInvertedForFlat.Value && !string.IsNullOrEmpty(flatmapPath))
                     {
@@ -306,6 +302,8 @@ namespace BetterContinents
                     Heightmap = null;
                 }
             }
+            public void DisableHeightmap() => Heightmap = null;
+
             public void SetBiomemapPath(string path, string projectDir = null)
             {
                 var finalPath = BiomemapPath(path, projectDir);
@@ -322,6 +320,8 @@ namespace BetterContinents
                     Biomemap = null;
                 }
             }
+            public void DisableBiomemap() => Biomemap = null;
+            
             public void SetSpawnmapPath(string path, string projectDir = null)
             {
                 var finalPath = SpawnmapPath(path, projectDir);
@@ -338,6 +338,8 @@ namespace BetterContinents
                     Spawnmap = null;
                 }
             }
+            public void DisableSpawnmap() => Spawnmap = null;
+            
             public void SetRoughmapPath(string path, string projectDir = null)
             {
                 var finalPath = RoughmapPath(path, projectDir);
@@ -354,6 +356,8 @@ namespace BetterContinents
                     Roughmap = null;
                 }
             }
+            public void DisableRoughmap() => Roughmap = null;
+            
             public void SetFlatmapPath(string path, string projectDir = null)
             {
                 var finalPath = FlatmapPath(path, projectDir);
@@ -370,6 +374,8 @@ namespace BetterContinents
                     Flatmap = null;
                 }
             }
+            public void DisableFlatmap() => Flatmap = null;
+            
             public void SetForestmapPath(string path, string projectDir = null)
             {
                 var finalPath = ForestmapPath(path, projectDir);
@@ -386,6 +392,7 @@ namespace BetterContinents
                     Forestmap = null;
                 }
             }
+            public void DisableForestmap() => Forestmap = null;
 
             private static float FeatureScaleCurve(float x) => ScaleRange(Gamma(x, 0.726965071031f), 0.2f, 3f);
 
@@ -761,7 +768,7 @@ namespace BetterContinents
             
             public float ApplyRoughmap(float x, float y, float smoothHeight, float roughHeight)
             {
-                if (this.Roughmap == null || this.RoughmapBlend == 0)
+                if (this.Roughmap == null)
                 {
                     return roughHeight;
                 }

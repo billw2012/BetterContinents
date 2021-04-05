@@ -495,5 +495,7 @@ namespace BetterContinents
                 RPC_PeerInfo(instance, rpc, pkg);
             }
         }
+
+        public static string CleanPath(string path) => path?.Replace("\\\"", "").Replace("\"", "").Trim();
     }
 }

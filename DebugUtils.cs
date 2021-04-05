@@ -131,14 +131,21 @@ namespace BetterContinents
                     mat.SetTexture("_CloudTex", TransparentTexture);
                 }
             });
+            AddCommand("mapds", "set minimap downscaling factor (for faster updates)", "(0 = vanilla quality, 1 = 1/2 res, 2 = 1/4 res, 3 = 1/8 res, 2 is default)", args =>
+            {
+                GameUtils.SetMinimapDownscalingPower(int.Parse(args));
+                GameUtils.FastMinimapRegen();
+            });
+
             AddCommand("refresh", "resets all vegetation and locations (done automatically on every change)", _ => {
                 GameUtils.Refresh();
             });
             AddCommand("despawnall", "despawn everything", _ => {
                 GameUtils.DespawnAll();
             });
-            AddCommand("resetall", "reset everything (WARNING: this deletes all modifications!)", _ => {
+            AddCommand("resetall", "reset everything (WARNING: this deletes everything that has been build in the map!)", _ => {
                 GameUtils.ResetAll();
+                Console.instance.Print($"<color=orange>All constructions removed!</color>");
             });
             AddCommand("regenloc", "regenerate all locations", _ =>
             {
@@ -146,17 +153,11 @@ namespace BetterContinents
                 BetterContinents.ConfigDebugSkipDefaultLocationPlacement.Value = false;
                 GameUtils.RegenerateLocations();
                 BetterContinents.ConfigDebugSkipDefaultLocationPlacement.Value = prevLocSetting;
+                Console.instance.Print($"<color=orange>All locations regenerated!</color>");
             });
-
-            // void AddHeightmapCommand(string cmd, string desc, string args, Action<string> action)
-            // {
-            //     AddCommand(cmd, desc, args, args2 =>
-            //     {
-            //         GameUtils.BeginHeightChanges();
-            //         action(args2);
-            //         GameUtils.EndHeightChanges();
-            //     });            
-            // }
+            AddCommand("scr", "save the minimap to a png", "(optional resolution, default is 2048)", arg => {
+                GameUtils.SaveMinimap(string.IsNullOrEmpty(arg) ? 2048 : int.Parse(arg));
+            });
 
             void AddHeightmapSubcommand(Command command, string cmd, string desc, string args, Action<string> action)
             {
@@ -174,31 +175,64 @@ namespace BetterContinents
                     AddHeightmapSubcommand(subcmd, "cs", "continent size", "(between 0 and 1)", args => BetterContinents.Settings.SetContinentSize(float.Parse(args)));            
                     AddHeightmapSubcommand(subcmd, "ma", "mountains amount", "(between 0 and 1)", args => BetterContinents.Settings.SetMountainsAmount(float.Parse(args)));
                     AddHeightmapSubcommand(subcmd, "sl", "sea level adjustment", "(between 0 and 1)", args => BetterContinents.Settings.SetSeaLevelAdjustment(float.Parse(args)));
-                    AddHeightmapSubcommand(subcmd, "oc", "ocean channels adjustment", "(0 to disable, 1 to enable)", args => BetterContinents.Settings.SetOceanChannelsEnabled(int.Parse(args) != 0));
+                    AddHeightmapSubcommand(subcmd, "oc", "ocean channels", "(0 to disable, 1 to enable)", args => BetterContinents.Settings.SetOceanChannelsEnabled(int.Parse(args) != 0));
                     AddHeightmapSubcommand(subcmd, "r", "rivers", "(0 to disable, 1 to enable)", args => BetterContinents.Settings.SetRiversEnabled(int.Parse(args) != 0));
                     AddHeightmapSubcommand(subcmd, "me", "map edge drop off", "(0 to disable, 1 to enable)", args => BetterContinents.Settings.SetMapEdgeDropoff(int.Parse(args) != 0));
                     AddHeightmapSubcommand(subcmd, "mc", "mountains allowed at center", "(0 to disable, 1 to enable)", args => BetterContinents.Settings.SetMountainsAllowedAtCenter(int.Parse(args) != 0));
                 });
                 command.AddSubcommand("h", "heightmap settings, get more info with 'bc param h help'", subcmdConfig: subcmd =>
                 {
-                    AddHeightmapSubcommand(subcmd, "fn", "set heightmap filename", "(full path including filename)", args => BetterContinents.Settings.SetHeightmapPath(args));
+                    AddHeightmapSubcommand(subcmd, "fn", "set heightmap filename", "(full path including filename, or nothing to disable)", args =>
+                    {
+                        if (string.IsNullOrEmpty(args))
+                        {
+                            BetterContinents.Settings.DisableHeightmap();
+                            Console.instance.Print($"<color=orange>Heightmap disabled!</color>");
+                        }
+                        else if (!File.Exists(BetterContinents.CleanPath(args)))
+                            Console.instance.Print($"<color=red>ERROR: {args} doesn't exist</color>");
+                        else
+                            BetterContinents.Settings.SetHeightmapPath(args);
+                    });
                     AddHeightmapSubcommand(subcmd, "am", "heightmap amount", "(between 0 and 5)", args => BetterContinents.Settings.SetHeightmapAmount(float.Parse(args)));
                     AddHeightmapSubcommand(subcmd, "bl", "heightmap blend", "(between 0 and 1)", args => BetterContinents.Settings.SetHeightmapBlend(float.Parse(args)));
                     AddHeightmapSubcommand(subcmd, "ad", "heightmap add", "(between -1 and 1)", args => BetterContinents.Settings.SetHeightmapAdd(float.Parse(args)));
                 });
                 command.AddSubcommand("r", "roughmap settings, get more info with 'bc param r help'", subcmdConfig: subcmd =>
                 {
-                    AddHeightmapSubcommand(subcmd, "fn", "set roughmap filename", "(full path including filename)", args => BetterContinents.Settings.SetRoughmapPath(args));
+                    AddHeightmapSubcommand(subcmd, "fn", "set roughmap filename", "(full path including filename, or nothing to disable)", args =>
+                    {
+                        if (string.IsNullOrEmpty(args))
+                        {
+                            BetterContinents.Settings.DisableRoughmap();
+                            Console.instance.Print($"<color=orange>Roughmap disabled!</color>");
+                        }
+                        else if (!File.Exists(BetterContinents.CleanPath(args)))
+                            Console.instance.Print($"<color=red>ERROR: {args} doesn't exist</color>");
+                        else
+                            BetterContinents.Settings.SetRoughmapPath(args);
+                    });
                     AddHeightmapSubcommand(subcmd, "bl", "roughmap blend", "(between 0 and 1)", args => BetterContinents.Settings.SetRoughmapBlend(float.Parse(args)));
                 });
                 command.AddSubcommand("f", "flatmap settings, get more info with 'bc param f help'", subcmdConfig: subcmd =>
                 {
-                    AddHeightmapSubcommand(subcmd, "fn", "set flatmap filename", "(full path including filename)", args =>
+                    AddHeightmapSubcommand(subcmd, "fn", "set flatmap filename", "(full path including filename, or nothing to disable)", args =>
                     {
-                        BetterContinents.Settings.SetFlatmapPath(args);
-                        if (BetterContinents.Settings.UseRoughInvertedAsFlat)
+                        if(string.IsNullOrEmpty(args))
                         {
-                            Console.instance.Print($"<color=orange>WARNING: 'Use Rough Inverted as Flat' is enabled so flatmap has no effect. Use 'bc urm 0' to disable it.</color>");
+                            BetterContinents.Settings.DisableFlatmap();
+                            Console.instance.Print($"<color=orange>Flatmap disabled!</color>");
+                        }
+                        else if (!File.Exists(BetterContinents.CleanPath(args)))
+                            Console.instance.Print($"<color=red>ERROR: {args} doesn't exist</color>");
+                        else
+                        {
+                            BetterContinents.Settings.SetFlatmapPath(args);
+                            if (BetterContinents.Settings.UseRoughInvertedAsFlat)
+                            {
+                                Console.instance.Print(
+                                    $"<color=orange>WARNING: 'Use Rough Inverted as Flat' is enabled so flatmap has no effect. Use 'bc urm 0' to disable it.</color>");
+                            }
                         }
                     });
 
@@ -207,17 +241,36 @@ namespace BetterContinents
                 });
                 command.AddSubcommand("b", "biomemap settings, get more info with 'bc param b help'", subcmdConfig: subcmd =>
                 {
-                    AddHeightmapSubcommand(subcmd, "fn", "set biomemap filename", "(full path including filename)", args =>
+                    AddHeightmapSubcommand(subcmd, "fn", "set biomemap filename", "(full path including filename, or nothing to disable)", args =>
                     {
-                        BetterContinents.Settings.SetBiomemapPath(args);
+                        if(string.IsNullOrEmpty(args))
+                        {
+                            BetterContinents.Settings.DisableBiomemap();
+                            Console.instance.Print($"<color=orange>Biomemap disabled!</color>");
+                        }
+                        else if (!File.Exists(BetterContinents.CleanPath(args)))
+                            Console.instance.Print($"<color=red>ERROR: {args} doesn't exist</color>");
+                        else
+                            BetterContinents.Settings.SetBiomemapPath(args);
                     });
                 });
                 command.AddSubcommand("s", "spawnmap settings, get more info with 'bc param s help'", subcmdConfig: subcmd =>
                 {
-                    AddHeightmapSubcommand(subcmd, "fn", "set spawnmap filename", "(full path including filename)", args =>
+                    AddHeightmapSubcommand(subcmd, "fn", "set spawnmap filename", "(full path including filename, or nothing to disable)", args =>
                     {
-                        BetterContinents.Settings.SetSpawnmapPath(args);
-                        Console.instance.Print($"<color=orange>INFO: Use 'bc regenloc' to update the location spawns in the world</color>");
+                        if(string.IsNullOrEmpty(args))
+                        {
+                            BetterContinents.Settings.DisableSpawnmap();
+                            Console.instance.Print($"<color=orange>Spawnmap disabled!</color>");
+                            Console.instance.Print($"<color=orange>INFO: Use 'bc regenloc' to update the location spawns in the world</color>");
+                        }
+                        else if (!File.Exists(BetterContinents.CleanPath(args)))
+                            Console.instance.Print($"<color=red>ERROR: {args} doesn't exist</color>");
+                        else
+                        {
+                            BetterContinents.Settings.SetSpawnmapPath(args);
+                            Console.instance.Print($"<color=orange>INFO: Use 'bc regenloc' to update the location spawns in the world</color>");
+                        }                    
                     });
                 });
                 command.AddSubcommand("fo", "forest settings, get more info with 'bc param fo help'", subcmdConfig: subcmd =>
@@ -229,7 +282,18 @@ namespace BetterContinents
                         BetterContinents.Settings.SetForestFactorOverrideAllTrees(int.Parse(args) != 0);
                         Console.instance.Print("<color=orange>NOTE: You need to reload the world to apply this change to the forest factor override!</color>");
                     });
-                    AddHeightmapSubcommand(subcmd, "fn", "set forestmap filename", "(full path including filename)", args => BetterContinents.Settings.SetForestmapPath(args));
+                    AddHeightmapSubcommand(subcmd, "fn", "set forestmap filename", "(full path including filename, or nothing to disable)", args =>
+                    {
+                        if(string.IsNullOrEmpty(args))
+                        {
+                            BetterContinents.Settings.DisableForestmap();
+                            Console.instance.Print($"<color=orange>Forestmap disabled!</color>");
+                        }
+                        else if (!File.Exists(BetterContinents.CleanPath(args)))
+                            Console.instance.Print($"<color=red>ERROR: {args} doesn't exist</color>");
+                        else
+                            BetterContinents.Settings.SetForestmapPath(args);
+                    });
                     AddHeightmapSubcommand(subcmd, "mu", "forestmap multiply", "(between 0 and 1)", args => BetterContinents.Settings.SetForestmapMultiply(float.Parse(args)));
                     AddHeightmapSubcommand(subcmd, "ad", "forestmap add", "(between 0 and 1)", args => BetterContinents.Settings.SetForestmapAdd(float.Parse(args)));
                 });
