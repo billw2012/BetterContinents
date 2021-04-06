@@ -46,12 +46,10 @@ namespace BetterContinents
             // Stop and reset the heightmap generator first
             HeightmapBuilder.instance.Dispose();
             var _ = new HeightmapBuilder();
-            BetterContinents.WorldGeneratorPatch.DisableCache();
         }
 
         public static void EndHeightChanges()
-        {
-            BetterContinents.WorldGeneratorPatch.EnableCache();
+        { 
             Refresh();
         }
 
@@ -108,8 +106,8 @@ namespace BetterContinents
                 Minimap.instance.m_fogTexture = new Texture2D(Minimap.instance.m_textureSize, Minimap.instance.m_textureSize, TextureFormat.RGBA32, false);
                 Minimap.instance.m_fogTexture.wrapMode = TextureWrapMode.Clamp;
                 Minimap.instance.m_explored = new bool[Minimap.instance.m_textureSize * Minimap.instance.m_textureSize];
-                Minimap.instance.m_mapImageLarge.material = UnityEngine.Object.Instantiate<Material>(Minimap.instance.m_mapImageLarge.material);
-                Minimap.instance.m_mapImageSmall.material = UnityEngine.Object.Instantiate<Material>(Minimap.instance.m_mapImageSmall.material);
+                Minimap.instance.m_mapImageLarge.material = Object.Instantiate<Material>(Minimap.instance.m_mapImageLarge.material);
+                Minimap.instance.m_mapImageSmall.material = Object.Instantiate<Material>(Minimap.instance.m_mapImageSmall.material);
                 Minimap.instance.m_mapImageLarge.material.SetTexture("_MainTex", Minimap.instance.m_mapTexture);
                 Minimap.instance.m_mapImageLarge.material.SetTexture("_MaskTex", Minimap.instance.m_forestMaskTexture);
                 Minimap.instance.m_mapImageLarge.material.SetTexture("_HeightTex", Minimap.instance.m_heightTexture);
@@ -323,7 +321,8 @@ namespace BetterContinents
         
         public static void DespawnAll()
         {
-            ZNetScene.instance.RemoveObjects(new List<ZDO>{
+            ZNetScene.instance.RemoveObjects(new List<ZDO>
+            {
                 Player.m_localPlayer.m_nview.m_zdo
             }, new List<ZDO>());
 
@@ -483,7 +482,7 @@ namespace BetterContinents
             var locationInstances = GetLocationInstances();
             foreach (var lg in locationInstances.Values.GroupBy(l => l.m_location.m_prefabName))
             {
-                if (list == null || list.Length == 0 || list.Any(f => lg.Key.ToLower().StartsWith(f)))
+                if (list == null || list.Length == 0 || list.Any(f => lg.Key.ToLower().StartsWith(f.ToLower())))
                 {
                     BetterContinents.Log($"Marking {lg.Count()} {lg.Key} locations on map");
                     int idx = 0;
@@ -511,7 +510,7 @@ namespace BetterContinents
                 var locationInstances = GetLocationInstances();
                 foreach (var lg in locationInstances.Values.GroupBy(l => l.m_location.m_prefabName))
                 {
-                    if (list.Any(f => lg.Key.ToLower().StartsWith(f)))
+                    if (list.Any(f => lg.Key.ToLower().StartsWith(f.ToLower())))
                     {
                         BetterContinents.Log($"Hiding {lg.Count()} {lg.Key} locations from the map");
                         int idx = 0;
@@ -527,6 +526,25 @@ namespace BetterContinents
                     }
                 }
             }
+        }
+
+        public static void SimpleParallelFor(int taskCount, int from, int to, Action<int> action)
+        {
+            var tasks = new Task[taskCount];
+            int perTaskCount = (to - @from) / taskCount;
+            for (int i = 0, f = @from; i < taskCount; i++, f += perTaskCount)
+            {
+                int taskFrom = f;
+                int taskTo = Mathf.Min(to, f + perTaskCount);
+                tasks[i] = Task.Run(() =>
+                {
+                    for (int j = taskFrom; j < taskTo; j++)
+                    {
+                        action(j);
+                    }
+                });
+            }
+            Task.WaitAll(tasks);
         }
     }
 }

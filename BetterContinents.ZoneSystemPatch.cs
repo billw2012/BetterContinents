@@ -11,7 +11,7 @@ namespace BetterContinents
         private class ZoneSystemPatch
         {
             private delegate void RegisterLocationDelegate(ZoneSystem instance, ZoneSystem.ZoneLocation location, Vector3 pos, bool generated);
-            private static readonly RegisterLocationDelegate RegisterLocation = GetDelegate<RegisterLocationDelegate>(typeof(ZoneSystem), "RegisterLocation");
+            private static readonly RegisterLocationDelegate RegisterLocation = DebugUtils.GetDelegate<RegisterLocationDelegate>(typeof(ZoneSystem), "RegisterLocation");
 
             // [HarmonyPostfix, HarmonyPatch(nameof(ZoneSystem.ValidateVegetation))]
             // private static void ValidateVegetationPostfix(ZoneSystem __instance)

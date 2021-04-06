@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using HarmonyLib;
 using UnityEngine;
 
 namespace BetterContinents
@@ -435,5 +436,8 @@ namespace BetterContinents
                 }
             }
         }
+
+        public static T GetDelegate<T>(Type type, string method) where T : Delegate 
+            => AccessTools.MethodDelegate<T>(AccessTools.Method(type, method));
     }
 }

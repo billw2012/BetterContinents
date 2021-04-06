@@ -1,6 +1,4 @@
-﻿using System.Collections.Concurrent;
-using System.Collections.Generic;
-using System.Linq;
+﻿using System.Linq;
 using HarmonyLib;
 using UnityEngine;
 
@@ -12,10 +10,6 @@ namespace BetterContinents
         [HarmonyPatch(typeof(WorldGenerator))]
         public class WorldGeneratorPatch
         {
-            // The base map x, y coordinates in 0..1 range
-            private static ConcurrentDictionary<Vector2, float> cachedHeights;
-            private static int cacheEnabled = 1;
-
             private static readonly string[] TreePrefixes =
             {
                 "FirTree",
@@ -36,8 +30,6 @@ namespace BetterContinents
             [HarmonyPrefix, HarmonyPatch(nameof(WorldGenerator.Initialize))]
             private static void InitializePrefix(World world)
             {
-                cachedHeights = new ConcurrentDictionary<Vector2, float>(1, 100100);
-                
                 if(Settings.EnabledForThisWorld && !world.m_menu && Settings.ForestFactorOverrideAllTrees && ZoneSystem.instance != null)
                 {
                     foreach (var v in ZoneSystem.instance.m_vegetation)
@@ -54,16 +46,6 @@ namespace BetterContinents
                 }
             }
 
-            public static void DisableCache() => cacheEnabled--;
-            public static void EnableCache()
-            {
-                cacheEnabled++;
-                if (cacheEnabled == 1)
-                {
-                    cachedHeights.Clear();
-                }
-            }
-
             // wx, wy are [-10500, 10500]
             // __result should be [0, 1]
             [HarmonyPrefix, HarmonyPatch("GetBaseHeight")]
@@ -72,11 +54,6 @@ namespace BetterContinents
                 if (!Settings.EnabledForThisWorld || menuTerrain)
                 {
                     return true;
-                }
-                
-                if (cacheEnabled == 1 && cachedHeights.TryGetValue(new Vector2(wx, wy), out __result))
-                {
-                    return false;
                 }
                 
                 switch (Settings.Version)
@@ -94,31 +71,9 @@ namespace BetterContinents
                 return false;
             }
 
-                
-            [HarmonyPostfix, HarmonyPatch("GetBaseHeight")]
-            private static void GetBaseHeightPostfix(float wx, float wy, float ___m_offset0, float ___m_offset1, bool menuTerrain, float __result, World ___m_world)
-            {
-                if (!Settings.EnabledForThisWorld || ___m_world.m_menu)
-                {
-                    return;
-                }
-
-                if (cacheEnabled == 1)
-                {
-                    if (cachedHeights.Count >= 100000)
-                    {
-                        // Can't easily do LRU, so we will just clear it entirely
-                        cachedHeights.Clear();
-                    }
-
-                    // Do this AFTER clearing so we have the latest value available (hopefully, concurrency means its still not guaranteed)
-                    cachedHeights.TryAdd(new Vector2(wx, wy), __result);
-                }
-            }
-            
             private delegate float GetBaseHeightDelegate(WorldGenerator instance, float wx, float wy, bool menuTerrain);
             private static readonly GetBaseHeightDelegate GetBaseHeightMethod 
-                = GetDelegate<GetBaseHeightDelegate>(typeof(WorldGenerator), "GetBaseHeight");
+                = DebugUtils.GetDelegate<GetBaseHeightDelegate>(typeof(WorldGenerator), nameof(WorldGenerator.GetBaseHeight));
 
             [HarmonyPostfix, HarmonyPatch("GetBiomeHeight")]
             private static void GetBiomeHeightPostfix(WorldGenerator __instance, float wx, float wy, ref float __result, World ___m_world)
@@ -336,4 +291,219 @@ namespace BetterContinents
             }
         }
     }
+
+    // None of this is faster in testing
+    #if false
+    [HarmonyPatch(typeof(HeightmapBuilder))]
+    public class HeightmapBuilderPatch
+    {
+        [HarmonyPrefix, HarmonyPatch(nameof(HeightmapBuilder.Build))]
+        private static bool BuildPrefix(HeightmapBuilder.HMBuildData data, out Stopwatch __state)
+        {
+            __state = new Stopwatch();
+            __state.Start();
+            if (BetterContinents.ConfigExperimentalMultithreadedHeightmapBuild.Value)
+            {
+                BuildMT(data);
+                return false;
+            }
+            else
+            {
+                return true;
+            }
+        }
+        
+        [HarmonyPostfix, HarmonyPatch(nameof(HeightmapBuilder.Build))]
+        private static void BuildPostfix(Stopwatch __state)
+        {
+            BetterContinents.Log(BetterContinents.ConfigExperimentalMultithreadedHeightmapBuild.Value
+                ? $"Heightmap Build MT {__state.ElapsedMilliseconds} ms"
+                : $"Heightmap Build Vanilla {__state.ElapsedMilliseconds} ms"
+            );
+        }
+        
+        private delegate void BuildDelegate(HeightmapBuilder instance, HeightmapBuilder.HMBuildData data);
+        private static readonly BuildDelegate BuildFn = (BuildDelegate)typeof(HeightmapBuilder)
+                .GetMethod(nameof(HeightmapBuilder.Build), BindingFlags.NonPublic | BindingFlags.Instance)
+                .CreateDelegate(typeof(BuildDelegate)); 
+
+        private static List<float> buildTimes = new List<float>();
+        [HarmonyPrefix, HarmonyPatch(nameof(HeightmapBuilder.BuildThread))]
+        private static bool BuildThreadPrefix(HeightmapBuilder __instance)
+        {
+            ZLog.Log("Builder started");
+            while (!__instance.m_stop)
+            {
+                if (!BetterContinents.ConfigExperimentalParallelChunksBuild.Value)
+                {
+                    __instance.m_lock.WaitOne();
+                    bool flag = __instance.m_toBuild.Count > 0;
+                    __instance.m_lock.ReleaseMutex();
+                    if (flag)
+                    {
+                        __instance.m_lock.WaitOne();
+                        HeightmapBuilder.HMBuildData hmbuildData = __instance.m_toBuild[0];
+                        __instance.m_lock.ReleaseMutex();
+
+                        var st = new Stopwatch();
+                        st.Start();
+                        __instance.Build(hmbuildData);
+                        buildTimes.Add(st.ElapsedMilliseconds);
+                        if (buildTimes.Count > 100)
+                        {
+                            buildTimes.RemoveAt(0);
+                        }
+                        BetterContinents.Log($"Average chunk build time with vanilla {buildTimes.Average()} ms");
+                        
+                        __instance.m_lock.WaitOne();
+                        __instance.m_toBuild.Remove(hmbuildData);
+                        __instance.m_ready.Add(hmbuildData);
+                        while (__instance.m_ready.Count > 16)
+                        {
+                            __instance.m_ready.RemoveAt(0);
+                        }
+                        __instance.m_lock.ReleaseMutex();
+                    }
+                    Thread.Sleep(10);
+                }
+                else
+                {
+                    __instance.m_lock.WaitOne();
+                    var buildTasks = __instance.m_toBuild
+                        .Select(b => new
+                        {
+                            task = Task.Run(() => BuildFn(__instance, b)),
+                            buildData = b
+                        })
+                        .ToList(); // Important to use ToList for force immediate enumeration inside the lock!
+                    __instance.m_toBuild.Clear();
+                    __instance.m_lock.ReleaseMutex();
+
+                    if (buildTasks.Any())
+                    {
+                        var st = new Stopwatch();
+                        st.Start();
+                        Task.WaitAll(buildTasks.Select(bt => bt.task).ToArray());
+                        buildTimes.Add(st.ElapsedMilliseconds / (float) buildTasks.Count);
+                        if (buildTimes.Count > 100)
+                        {
+                            buildTimes.RemoveAt(0);
+                        }
+                        BetterContinents.Log($"Average chunk build time with MT {buildTimes.Average()} ms");
+
+                        __instance.m_lock.WaitOne();
+                        foreach (var bt in buildTasks)
+                        {
+                            __instance.m_ready.Add(bt.buildData);
+                        }
+
+                        while (__instance.m_ready.Count > 16)
+                        {
+                            __instance.m_ready.RemoveAt(0);
+                        }
+
+                        __instance.m_lock.ReleaseMutex();
+                    }
+                }
+
+                Thread.Sleep(10);
+            }
+
+            return false;
+        }
+
+        // This is slower, at least for the 64x64 tiles
+        private static void BuildMT(HeightmapBuilder.HMBuildData data)
+	    {
+		    int num = data.m_width + 1;
+		    int num2 = num * num;
+		    Vector3 vector = data.m_center + new Vector3((float)data.m_width * data.m_scale * -0.5f, 0f, (float)data.m_width * data.m_scale * -0.5f);
+		    WorldGenerator worldGen = data.m_worldGen;
+		    data.m_cornerBiomes = new Heightmap.Biome[4];
+		    data.m_cornerBiomes[0] = worldGen.GetBiome(vector.x, vector.z);
+		    data.m_cornerBiomes[1] = worldGen.GetBiome(vector.x + (float)data.m_width * data.m_scale, vector.z);
+		    data.m_cornerBiomes[2] = worldGen.GetBiome(vector.x, vector.z + (float)data.m_width * data.m_scale);
+		    data.m_cornerBiomes[3] = worldGen.GetBiome(vector.x + (float)data.m_width * data.m_scale, vector.z + (float)data.m_width * data.m_scale);
+		    Heightmap.Biome biome = data.m_cornerBiomes[0];
+		    Heightmap.Biome biome2 = data.m_cornerBiomes[1];
+		    Heightmap.Biome biome3 = data.m_cornerBiomes[2];
+		    Heightmap.Biome biome4 = data.m_cornerBiomes[3];
+		    data.m_baseHeights = new List<float>(num * num);
+		    for (int i = 0; i < num2; i++)
+		    {
+			    data.m_baseHeights.Add(0f);
+		    }
+
+            GameUtils.SimpleParallelFor(2, 0, num, j => 
+                //for (int j = 0; j < num; j++)
+            {
+                float wy = vector.z + (float) j * data.m_scale;
+                float t = Mathf.SmoothStep(0f, 1f, (float) j / (float) data.m_width);
+                for (int k = 0; k < num; k++)
+                {
+                    float wx = vector.x + (float) k * data.m_scale;
+                    float t2 = Mathf.SmoothStep(0f, 1f, (float) k / (float) data.m_width);
+                    float value;
+                    if (data.m_distantLod)
+                    {
+                        Heightmap.Biome biome5 = worldGen.GetBiome(wx, wy);
+                        value = worldGen.GetBiomeHeight(biome5, wx, wy);
+                    }
+                    else if (biome3 == biome && biome2 == biome && biome4 == biome)
+                    {
+                        value = worldGen.GetBiomeHeight(biome, wx, wy);
+                    }
+                    else
+                    {
+                        float biomeHeight = worldGen.GetBiomeHeight(biome, wx, wy);
+                        float biomeHeight2 = worldGen.GetBiomeHeight(biome2, wx, wy);
+                        float biomeHeight3 = worldGen.GetBiomeHeight(biome3, wx, wy);
+                        float biomeHeight4 = worldGen.GetBiomeHeight(biome4, wx, wy);
+                        float a = Mathf.Lerp(biomeHeight, biomeHeight2, t2);
+                        float b = Mathf.Lerp(biomeHeight3, biomeHeight4, t2);
+                        value = Mathf.Lerp(a, b, t);
+                    }
+
+                    data.m_baseHeights[j * num + k] = value;
+                }
+            });
+
+		    if (data.m_distantLod)
+		    {
+			    for (int l = 0; l < 4; l++)
+			    {
+				    List<float> list = new List<float>(data.m_baseHeights);
+				    for (int m = 1; m < num - 1; m++)
+				    {
+					    for (int n = 1; n < num - 1; n++)
+					    {
+						    float num3 = list[m * num + n];
+						    float num4 = list[(m - 1) * num + n];
+						    float num5 = list[(m + 1) * num + n];
+						    float num6 = list[m * num + n - 1];
+						    float num7 = list[m * num + n + 1];
+						    if (Mathf.Abs(num3 - num4) > 10f)
+						    {
+							    num3 = (num3 + num4) * 0.5f;
+						    }
+						    if (Mathf.Abs(num3 - num5) > 10f)
+						    {
+							    num3 = (num3 + num5) * 0.5f;
+						    }
+						    if (Mathf.Abs(num3 - num6) > 10f)
+						    {
+							    num3 = (num3 + num6) * 0.5f;
+						    }
+						    if (Mathf.Abs(num3 - num7) > 10f)
+						    {
+							    num3 = (num3 + num7) * 0.5f;
+						    }
+						    data.m_baseHeights[m * num + n] = num3;
+					    }
+				    }
+			    }
+		    }
+	    }
+    }
+    #endif
 }

@@ -1,6 +1,9 @@
 using System;
 using System.Collections.Generic;
+using System.ComponentModel;
+using System.Diagnostics;
 using System.Reflection;
+using System.Threading.Tasks;
 using BepInEx;
 using BepInEx.Configuration;
 using HarmonyLib;
@@ -8,6 +11,7 @@ using UnityEngine;
 using UnityEngine.Assertions;
 using UnityEngine.SceneManagement;
 using UnityEngine.UI;
+using Debug = UnityEngine.Debug;
 
 namespace BetterContinents
 {
@@ -61,7 +65,7 @@ namespace BetterContinents
         
         public static ConfigEntry<bool> ConfigDebugModeEnabled;
         public static ConfigEntry<bool> ConfigDebugSkipDefaultLocationPlacement;
-        
+
         private const float WorldSize = 10500f;
         private static readonly Vector2 Half = Vector2.one * 0.5f;
         private static float NormalizedX(float x) => x / (WorldSize * 2f) + 0.5f;
@@ -147,10 +151,6 @@ namespace BetterContinents
 
             UI.Init();
         }
-        
-        private static T GetDelegate<T>(Type type, string method) where T : Delegate 
-            => AccessTools.MethodDelegate<T>(
-                AccessTools.Method(type, method));
 
         private void OnGUI()
         {
@@ -192,7 +192,7 @@ namespace BetterContinents
         private class CharacterPatch
         {
             private delegate bool TakeInputDelegate(Character instance);
-            private static readonly TakeInputDelegate TakeInput = GetDelegate<TakeInputDelegate>(typeof(Character), "TakeInput");
+            private static readonly TakeInputDelegate TakeInput = DebugUtils.GetDelegate<TakeInputDelegate>(typeof(Character), "TakeInput");
                 
             [HarmonyPrefix, HarmonyPatch("UpdateDebugFly")]
             private static void UpdateDebugFlyPrefix(Character __instance, Vector3 ___m_moveDir, ref Vector3 ___m_currentVel)
@@ -223,7 +223,7 @@ namespace BetterContinents
         private class MinimapPatch
         {
             private delegate Vector3 ScreenToWorldPointDelegate(Minimap instance, Vector3 mousePos);
-            private static readonly ScreenToWorldPointDelegate ScreenToWorldPoint = GetDelegate<ScreenToWorldPointDelegate>(typeof(Minimap), "ScreenToWorldPoint");
+            private static readonly ScreenToWorldPointDelegate ScreenToWorldPoint = DebugUtils.GetDelegate<ScreenToWorldPointDelegate>(typeof(Minimap), "ScreenToWorldPoint");
             
             [HarmonyPostfix, HarmonyPatch(nameof(Minimap.OnMapMiddleClick))]
             private static void OnMapMiddleClickPostfix(Minimap __instance)
@@ -248,7 +248,8 @@ namespace BetterContinents
                 Heightmap.Biome.Swamp |
                 Heightmap.Biome.BlackForest
             ;
-            [HarmonyPrefix, HarmonyPatch("GetMaskColor")]
+
+            [HarmonyPrefix, HarmonyPatch(nameof(Minimap.GetMaskColor))]
             private static bool GetMaskColorPrefix(Minimap __instance, float wx, float wy, float height, Heightmap.Biome biome, ref Color __result, Color ___noForest, Color ___forest)
             {
                 if (Settings.EnabledForThisWorld && Settings.ForestFactorOverrideAllTrees && (biome & ForestableBiomes) != 0)
@@ -259,6 +260,42 @@ namespace BetterContinents
                     return false;
                 }
                 return true;
+            }
+
+            [HarmonyPrefix, HarmonyPatch(nameof(Minimap.GenerateWorldMap))]
+            private static bool GenerateWorldMapPrefix(Minimap __instance)
+            {
+                GenerateWorldMapMT(__instance);
+                return false;
+            }
+
+            private static void GenerateWorldMapMT(Minimap __instance)
+            {
+                int halfSize = __instance.m_textureSize / 2;
+                float halfSizeF = __instance.m_pixelSize / 2f;
+                var mapPixels = new Color32[__instance.m_textureSize * __instance.m_textureSize];
+                var forestPixels = new Color32[__instance.m_textureSize * __instance.m_textureSize];
+                var heightPixels = new Color[__instance.m_textureSize * __instance.m_textureSize];
+                GameUtils.SimpleParallelFor(4, 0, __instance.m_textureSize, i =>
+                {
+                    for (int j = 0; j < __instance.m_textureSize; j++)
+                    {
+                        float wx = (float) (j - halfSize) * __instance.m_pixelSize + halfSizeF;
+                        float wy = (float) (i - halfSize) * __instance.m_pixelSize + halfSizeF;
+                        var biome = WorldGenerator.instance.GetBiome(wx, wy);
+                        float biomeHeight = WorldGenerator.instance.GetBiomeHeight(biome, wx, wy);
+                        mapPixels[i * __instance.m_textureSize + j] = __instance.GetPixelColor(biome);
+                        forestPixels[i * __instance.m_textureSize + j] = __instance.GetMaskColor(wx, wy, biomeHeight, biome);
+                        heightPixels[i * __instance.m_textureSize + j] = new Color(biomeHeight, 0f, 0f);
+                    }
+                });
+                
+                __instance.m_forestMaskTexture.SetPixels32(forestPixels);
+                __instance.m_forestMaskTexture.Apply();
+                __instance.m_mapTexture.SetPixels32(mapPixels);
+                __instance.m_mapTexture.Apply();
+                __instance.m_heightTexture.SetPixels(heightPixels);
+                __instance.m_heightTexture.Apply();
             }
         }
         
