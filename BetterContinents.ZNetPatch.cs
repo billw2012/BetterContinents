@@ -8,7 +8,6 @@ using System.Text;
 using System.Threading.Tasks;
 using HarmonyLib;
 using UnityEngine;
-using UnityEngine.UI;
 
 namespace BetterContinents
 {

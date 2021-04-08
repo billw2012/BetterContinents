@@ -1,5 +1,4 @@
 ﻿using BepInEx.Configuration;
-using UnityEngine;
 using UnityEngine.Assertions;
 
 namespace BetterContinents

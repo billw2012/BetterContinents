@@ -1,5 +1,4 @@
-﻿using System.Collections.Generic;
-using HarmonyLib;
+﻿using HarmonyLib;
 using UnityEngine;
 
 namespace BetterContinents
@@ -24,7 +23,7 @@ namespace BetterContinents
                 Log($"Generating location of group {groupName}, required {location.m_quantity}, unique {location.m_unique}, name {location.m_prefabName}");
                 if (Settings.EnabledForThisWorld)
                 {
-                    if (Settings.UseSpawnmap)
+                    if (Settings.HasSpawnmap)
                     {
                         // Place all locations specified by the spawn map, ignoring counts specified in the prefab
                         int placed = 0;

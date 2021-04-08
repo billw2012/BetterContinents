@@ -1,15 +1,7 @@
-using System;
-using System.Collections.Generic;
-using System.ComponentModel;
-using System.Diagnostics;
-using System.Reflection;
-using System.Threading.Tasks;
 using BepInEx;
 using BepInEx.Configuration;
 using HarmonyLib;
 using UnityEngine;
-using UnityEngine.Assertions;
-using UnityEngine.SceneManagement;
 using UnityEngine.UI;
 using Debug = UnityEngine.Debug;
 
@@ -19,6 +11,7 @@ namespace BetterContinents
     public partial class BetterContinents : BaseUnityPlugin
     {
         // See the Awake function for the config descriptions
+        public static ConfigEntry<int> NexusID;
         public static ConfigEntry<bool> ConfigEnabled;
         
         public static ConfigEntry<float> ConfigContinentSize;
@@ -35,6 +28,8 @@ namespace BetterContinents
         public static ConfigEntry<float> ConfigHeightmapAmount;
         public static ConfigEntry<float> ConfigHeightmapBlend;
         public static ConfigEntry<float> ConfigHeightmapAdd;
+        public static ConfigEntry<float> ConfigHeightmapMask;
+        public static ConfigEntry<bool> ConfigHeightmapOverrideAll;
         
         public static ConfigEntry<string> ConfigBiomemapFile;
 
@@ -114,6 +109,8 @@ namespace BetterContinents
                     .Value("Heightmap Amount").Description("Multiplier of the height value from the heightmap file (more than 1 leads to higher max height than vanilla, good results are not guaranteed)").Default(1f).Range(0f, 5f).Bind(out ConfigHeightmapAmount)
                     .Value("Heightmap Blend").Description("How strongly to blend the heightmap file into the final result").Default(1f).Range(0f, 1f).Bind(out ConfigHeightmapBlend)
                     .Value("Heightmap Add").Description("How strongly to add the heightmap file to the final result (usually you want to blend it instead)").Default(0f).Range(-1f, 1f).Bind(out ConfigHeightmapAdd)
+                    .Value("Heightmap Mask").Description("How strongly to apply the heightmap as a mask on normal height generation (i.e. it limits maximum height to the height of the mask)").Default(0f).Range(0f, 1f).Bind(out ConfigHeightmapMask)
+                    .Value("Heightmap Override All").Description("All other aspects of the height calculation will be disabled, so the world will perfectly conform to your heightmap").Default(true).Bind(out ConfigHeightmapOverrideAll)
                 .Group("BetterContinents.Roughmap")
                     .Value("Roughmap File").Description("Path to a roughmap file to use. See the description on Nexusmods.com for the specifications (it will fail if they are not met)").Bind(out ConfigRoughmapFile)
                     .Value("Roughmap Blend").Description("How strongly to apply the roughmap file").Default(1f).Range(0f, 1f).Bind(out ConfigRoughmapBlend)
@@ -144,6 +141,8 @@ namespace BetterContinents
                 .Group("BetterContinents.Debug")
                     .Value("Debug Mode").Description("Automatically reveals the full map on respawn, enables cheat mode, and debug mode, for debugging purposes").Bind(out ConfigDebugModeEnabled)
                     .Value("Skip Default Location Placement").Description("Skips default location placement during world gen (spawn temple and spawnmap are still placed), for quickly testing the heightmap itself").Bind(out ConfigDebugSkipDefaultLocationPlacement)
+                .Group("BetterContinents.Misc")
+                    .Value("NexusID").Default(446).Description("For Nexus Update Check compatibility").Bind(out NexusID);
                 ;
 
             new Harmony("BetterContinents.Harmony").PatchAll();

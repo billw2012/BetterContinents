@@ -236,6 +236,7 @@
     <Compile Include="ConfigHelpers.cs" />
     <Compile Include="ConfigurationManagerAttributes.cs" />
     <Compile Include="DebugUtils.cs" />
+    <Compile Include="FastNoiseLite\FastNoiseLite.cs" />
     <Compile Include="GameUtils.cs" />
     <Compile Include="ImageMapBase.cs" />
     <Compile Include="ImageMapBiome.cs" />

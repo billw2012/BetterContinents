@@ -1,243 +1,32 @@
 # Better Continents: a Valheim Modification
 
-## **[Better Continents on Nexusmods](https://www.nexusmods.com/valheim/mods/446)**
+## **[Download on Nexusmods](https://www.nexusmods.com/valheim/mods/446) | [Full Documentation](https://billw2012.github.io/BetterContinents-Docs/introduction.html) | [Installation Guide](https://billw2012.github.io/BetterContinents-Docs/setup-guide.html) | [Discord](https://discord.gg/3XW8ZntYzN)**
 
-## **IMPORTANT**: Backup your characters and worlds before using this (as you always should), and before you update.
+## **Introduction**
+This mod provides the tools to both improve the standard terrain generation of the game, and override aspects of it with image maps, allowing precise control over height, biomes, location placement, and forest coverage.  
+These generated worlds can be shared with others (who have this mod installed) by simply copying the usual world files, along with the extra `.BetterContinents` file.  
 
-## Join the [Valheim Worlds](https://discord.gg/3XW8ZntYzN) discord to get help, share progress or tips and tricks.
+> See maps people have shared [here](https://www.nexusmods.com/valheim/mods/categories/13/).
 
-## See maps people have shared on Nexusmods.com [here.](https://www.nexusmods.com/valheim/mods/categories/13/)
----
-
-# What?
-This mod provides the tools to both improve the standard heightmap generation of the game, and override aspects of it with hand crafted height and biome maps taken from images.
+> Check the links above for documentation and installation instructions.
 
 ---
-# Features
-* Change global scale -- changes continent sizes
-* Use image files as base heightmap layer, detail heightmap layer, and biome specific heightmap layer, with blending options
-* Use image file to specify biomes
-* Use image file to specify spawning positions for locations, including player start, bosses, and trader
-* Use image file to specify forest coverage, including in biomes that normally are totally forested (Swamp, Mistlands, Dark Forest, Mountains)
-* Adjust mountains amount
-* Adjust sea level
-* Adjust forest scaling (how big the contiguous areas of forest/clearings are), and amount
-* Specify starting position explicitly
-* Additional customizable ridged heightmap layer gives more varied geography
-* Still allows worlds that were created before this mod was installed to be loaded
-* Includes a debug mode to automatically enable cheats, reveal the full map, toggle on vanilla debugmode, and various other things, for quicker testing
-* Allows skipping of default location placement for quicker testing (should not be done in final version of the world)
+## **Features**
+* Use image files as [base heightmap](https://billw2012.github.io/BetterContinents-Docs/settings/heightmap.html#heightmap-file) layer, [detail heightmap](https://billw2012.github.io/BetterContinents-Docs/settings/flatmap.html#flatmap-file) layer, and [biome specific heightmap](https://billw2012.github.io/BetterContinents-Docs/settings/roughmap.html#roughmap-file) layer, with blending options for each
+* Use an [image file to specify biomes](https://billw2012.github.io/BetterContinents-Docs/settings/biomemap.html#biomemap-file)
+* Use an [image file to specify spawning positions](https://billw2012.github.io/BetterContinents-Docs/settings/spawnmap.html#spawnmap-file) for locations, including player start, bosses, and trader
+* Use an [image file to specify forest coverage](https://billw2012.github.io/BetterContinents-Docs/settings/forest.html#forestmap-file), including in [biomes that normally are totally forested](https://billw2012.github.io/BetterContinents-Docs/settings/forest.html#forest-factor-overrides-all-trees) (Swamp, Mistlands, Dark Forest, Mountains)
+* Change [global scale](https://billw2012.github.io/BetterContinents-Docs/settings/global.html#continent-size) – changes continent sizes
+* Adjust [mountains amount](https://billw2012.github.io/BetterContinents-Docs/settings/global.html#mountains-amount)
+* Adjust [sea level](https://billw2012.github.io/BetterContinents-Docs/settings/global.html#sea-level-adjustment)
+* Adjust [forest scaling](https://billw2012.github.io/BetterContinents-Docs/settings/forest.html#forest-scale) (how big the contiguous areas of forest/clearings are), and amount
+* Specify [starting position](https://billw2012.github.io/BetterContinents-Docs/settings/start-position.html) explicitly
+* Additional customizable [ridged heightmap layer](https://billw2012.github.io/BetterContinents-Docs/settings/ridges.html) gives more varied geography
+* Still allows loading vanilla maps, without needing to adjust any settings or disable the mod
+* Backwards compatible (since version 0.2) – worlds created with older versions 
+will still look the same when loaded with newer ones[*]Includes a debug mode to automatically enable cheats, reveal the full map, toggle 
+on vanilla debugmode, and various other things, for quicker testing[*]Allows skipping of default location placement for quick world generation
+* Has extensive console command list for adjusting all settings, and regenerating locations
+* Custom map update when using console commands allows changes to be seen in full in a matter of seconds
+* Export full map to png at any resolution
 
----
-# Usage
-1. Install the mod and run the game (see below for Installation Guide).
-2. If you have [BepInEx Configuration Manager](https://github.com/BepInEx/BepInEx.ConfigurationManager/releases) installed (if you use Vortex it installed automatically):
-   a. Press F1 to open it 
-   b. Find the Better Continents section and expand it
-   c. Edit the parameters here:
-      i. You can paste in the full path to the heightmap you want to use, there is no file browser
-3. If you don't have the configuration editor then you should quit the game again and find the newly generated config file in the BepinEx/config directory.
-
----
-# Installation Guide
-## Client
-Ideally use Vortex to install, as it includes all the dependencies you need for this mod already.
-Otherwise do this:
-0. Backup your world saves. Do it. Do it now! Backup your characters to while you are at it.
-1. Install BepInEx Valheim as per the Requirements section (see their [documentation](https://valheim.thunderstore.io/package/denikson/BepInExPack_Valheim/) on how to do this)
-2. Optionally (but highly recommended) install the BepInEx Configuration Manager from [here](https://github.com/BepInEx/BepInEx.ConfigurationManager/releases)
-3. Install this mod: place the [font=Courier New]BetterContinents.dll[/font] in the [font=Courier New]BepInEx\plugins[/font] directory.
-
-## Server
-0. Stop your server.
-1. Backup your world saves on from server. Do it. Do it now! How you access them depends on your provider, probably FTP. Download them locally and put them somewhere safe. Each world should have a .fwl and .db file, and the default world is called "Dedicated".
-2. Enable mods on your server if they are not enabled already. How to do this is highly dependent on your server provider: for instance some provide a toggle on the server management page to "enable mods", which results in BepInEx (or a mod that comes with BepInEx, e.g. Valheim+) being installed and enabled for you. Alternatively you might need to set this up yourself, in which case you should follow [BepInEx server installation guide](https://valheim.thunderstore.io/package/denikson/BepInExPack_Valheim/).
-3. Upload this mod to the [font=Courier New]BepInEx\plugins[/font] directory on your server. Again this depends on your server provider, but probably you will do it by FTP. The [font=Courier New]BetterContinents.dll[/font] file should now reside in the [font=Courier New]BepInEx\plugins[/font] directory.
-4. Upload some world you want to use that was created with Better Continents, perhaps one from [here](https://www.nexusmods.com/valheim/mods/categories/13/), or one you created your self. Its possible to create a new world ON the server, but it is easier to do it locally as you can modify the configuration in game and test it first.
-5. Point your server at the world you uploaded. How to do it depends on your server provider, there should be some mechanism to specify the World Name, or modify the command line of the server.
-6. Start your server again and join it.
-
-You need to follow the Client setup guide above as well: both client and server need the same version of Better Continents installed when running a Better Continents world.
-However: you can join servers that don't have Better Continents installed, and it will fall back to vanilla behaviour locally.
-You can also join servers with Better Continents installed, without having it installed yourself, *as long as the server runs a world that doesn't require it* (i.e. one created without it, or with it disabled).
-
----
-# Authoring Guide
-Check out [my example map](https://www.nexusmods.com/valheim/mods/616) which includes the source Photoshop file as a separate download.
-Check out [this video](https://www.youtube.com/watch?v=SuDieAlR6Kg) in which I make a map from scratch using my  [template file](https://www.nexusmods.com/valheim/mods/446?tab=files). Use the chapters to see different bits of the process I am using.
-Check out [this other video](https://www.youtube.com/watch?v=MzO_cl_mTLA) that shows how to take the exported image files from the previous step into the game, and create and verify the world.
-
-## Tools
-I would recommend using Photoshop or [Krita](https://krita.org/en/download/krita-desktop/) for authoring, NOT GIMP, as GIMP does not support [non-destructive editing](https://helpx.adobe.com/uk/photoshop/using/nondestructive-editing.html) via layer effects.
-Krita is open source, and has a mostly identical layer effects system to Photoshop.
-If you have a tablet then it can help a lot in painting smoothly and organically.
-You could use [World Machine](https://www.world-machine.com/) or [Gaea](https://quadspinner.com/) to either generate a new heightmap, or modify an existing one. The erosion effects alone can help you make the terrain a lot more realistic, and be a guide on river placement. You could also generate biomemaps using it, but I won't be going into that here (it is a complex subject and I have not investigated it in any depth).
-
-## Template
-I recommend you use my [template file](https://www.nexusmods.com/valheim/mods/446?tab=files) as a starting point.
-It contains premade groups, with height, water, and biome layers already setup.
-The intended usage of the groups\layers is like so:
-
-* Heightmap\Heightmap: this is your base heightmap, paint it, paste something in, however you want to create it. The mask should be white for land and black for water (we can call this a "land mask"). You can generate the inital land mask using Threshold on the heightmap.
-* Heightmap\Water edge mask: this is intended for creating smooth transitions between water and land, i.e. avoiding cliffs. The mask should be white for water, black for land (we can call this the "water mask"). i.e. This mask is the inverse of the land mask, and you can create it just by coping the land mask, then applying color invert.
-* Biomes: the rest of the layers are the biomes themselves. Just paint white into the mask to apply that biome. You can use soft brush/smudge etc and then apply threshold to the mask directly to get crisp edges back again (which is required for it to load correctly).
-* Reference: this contains reference images. Its often useful to drop in the source map you are trying to recreate, then set it as semi-transparent so you can paint over/under it. For my Middle Earth map I also dropped in a reference image that showed the route followed by Frodo/Bilbo so I could mark it with waymarkers in the spawnmap.
-* Reference\Biome Key: this is just a reference for the biome colors, you don't need it really as the layers are already set up.
-* Reference\Spawn Table: this is the key for how colors map to what is spawned. Where the same color maps to multiple things which one is 
-used will be randomly selected on world creation. I did this to simplify the spawnmap creation process, and make it easier to read visually. If there are some in there that should not be grouped then please raise in the comments.[*]Spawn: this is your primary spawnmap layer. I suggest you put the main spawns in here (starting point, bosses, trader), and then add extra layers for things of which there are many. e.g. a layer for buildings, one for waymarkers, etc. I suggest you paint them in using 3 radius pencil (or bigger if you want more randomness). Ensure the spawn areas don't touch each other.
-* Source: this is a place for your source images. You should put them in here to start with, and never modify them, rather copy them when you need to. Its always useful to be able to reference the unmodified source directly.
-
-
-## Heightmap
-### Requirements
-
-* The height map image must be square, and one of these sizes: 32. 64, 128, 256, 512, 1024, 2048, 4096. 
-* Most formats are supported, including HDR ones (anything Unity Texture Import supports). 
-
-
-### Where to get Heightmaps
-
-* Google: https://www.google.com/search?q=heightmap%20images&tbm=isch&tbs=rimg%3ACUrn-Sh_19QfyYckcSKAP9V2W&biw=1838&bih=1019
-* A very nice Google Maps style page that will export heightmaps directly for any area on Earth: https://tangrams.github.io/heightmapper
-* World Machine: https://www.world-machine.com/. This is highly advanced heightmap generating software that can do things like physical modelling of erosion. It can also generate assist in generating biome maps automatically as well.
-
-
-### Creation Hints
-
-* Ensure the ocean areas of the heightmap are pure black, not grey
-* Apply automatic contrast/levels to ensure the values are using the full range available
-* I recommend smoothing (blurring) the image to avoid any sharp changes in altitude
-* Getting sealevel looking correct might take some tweaking, of either the image itself or the sealevel setting
-* To determine sealevel with your current config settings you can create a smooth gradient on the heightmap (gradient paint bucket tool in Photoshop), apply a flatish biome to it (e.g. plains), and then view it in game to determine what gray value corresponds to sealevel. In my testing with sealevel set to 25% the corresponding gray value is about #0d0d0d.
-* When trying to test your map in game start with all default, then set these settings:
-    HeightmapFile(paste your file name in there of course)
-    OceanChannelsEnabled un-ticked
-    RiversEnabled un-ticked
-    RidgeBlend 0%
-    RidgeAmount 0%
-    
-
-
-## Roughmap
-The roughmap controls the vanilla biome-specific height variations. In vanilla each biome has its own additional height variation that is applied, for instance the swamp height is always set to about sea-level, mountains have extra large scale variation applied to generate peaks. A white value in the roughmap will result in the vanilla biome variations being unmodified. A black value will result in them being removed entirely. 
-### Requirements
-
-* The size and format constraints are the same as the heightmap, however it doesn't need to be the exact same values/format as the heightmap you use. You can use a 4096x4096 HDR heightmap with a 64x64 png roughmap for instance.
-
-
-## Flatmap
-The flatmap controls the smaller detail bumpiness that is applied ontop of the large scale height changes in the base height calculation. A black value in the flatmap will result in the vanilla small height variations being unmodified. A white value will result in them being removed entirely.
-As the roughmap and flatmap have similar but inverted behavior (they both serve to control small scale variations in height), you can use one of them to drive the other with the "Use Rough For Flat" flag in the config. This will use the roughmap (inverted, so white is black and vice versa) as the flat map. The means if you paint all black in roughmap it will remove all extra procedural details (excluding the Ocean Channels and Rivers, which you can also toggle in the config).
-### Requirements
-
-* The size and format constraints are the same as the heightmap, however it doesn't need to be the exact same values/format as the heightmap you use. You can use a 4096x4096 HDR heightmap with a 64x64 png flatmap for instance.
-
-
-## Biomemap
-### Requirements
-
-* The size and format constraints are the same as the heightmap, however it doesn't need to be the exact same values/format as the heightmap you use. You can use a 4096x4096 HDR heightmap with a 64x64 png biomemap for instance.
-* The color codes for the biomes are as follows (see images for a visual representation):
-    Ocean - #0000FF
-    Meadows - #00FF00
-    Black Forest - #007F00
-    Swamp - #7F7F00
-    Mountains - #FFFFFF
-    Plains - #FFFF00
-    Mistlands - #7F7F7F
-    Deep North - #00FFFF
-    Ash Lands - #FF0000
-    [*]When loading the biomemap, whichever color as specified above most closely matches the image color will determine which biome is used. Biomes cannot overlap, so the entire map is just one image.
-
-
-### Biomemap Creation Hints
-
-* Setup the above colors as swatches, or a stored palette, for easy access.
-* Place your heightmap on a background layer, then set your biome layers to 50% transparent.
-* Use a separate layer for each biome, then you can reorder the layers if needed, and even apply layer edge effects.
-* For each biome layer, fill it with the biome color entirely, then add a layer mask and paint into that, NOT the color part. This allows direct use of threshold onto the layer mask without having to convert it back and forth between color and black/white.
-* Generate masks for the biomes based on height by using "Threshold". You can create a general land mask, and a mountains mask quite easily using this method. It can work for a basic Swamps mask as well.
-* Improve the look of your Swamp mask by applying the water mask to it to exclude all water areas from the biome. This looks cleaner on the map and should reduce the number of enemy spawning in the water.
-* If you have created a biome mask and want to grow or shrink its edges you can bake it into black and white, blur it, and then use Threshold again. 
-* Improve the look of the biome edges by using the smudge tool to roughen them up. After this you can reapply threshold to make the edges crisp again.
-
-
-## Spawnmap
-This map allows you to explicitly specifiy the spawn positions of *location types*. Location types refers to any object that is spawned into the game during world generation. World generation happens the first time a world is ever loaded in game. Location types include the "start temple", bosses, dungeons, all buildings, guck trees, villages, ship-wrecks, stone henges etc. See the spawn color chart in images for the full list (as of writing, expect more with game updates).
-### Requirements
-
-* The size and format constraints are the same as the heightmap, however it doesn't need to be the exact same values/format as the heightmap you use. You can use a 4096x4096 HDR heightmap with a 64x64 png spawnmap for instance.
-* The color codes for the the spawns are in one of the images posted, please view them there. I suggest you bring the image into your paint program so you can use the eye-dropper to make things easier.
-* The image background should be black.
-* The spawnmap colors must match *exactly* with the one specified in the table when it is loaded in game. Usually this shouldn't be a problem if you use high quality png.
-* The actual spawn position is chosen from all adjacent pixels in the spawnmap that have the same color. i.e. Every contiguous (not including diagonal) area of the same color is a single spawn location, the final position of which is a randomly chosen pixel from with the area. So you need to separate spawn areas by at least one pixel of black to stop them registering as the same area.
-
-
-### Spawnmap Behaviour
-
-* All spawn positions specified in your spawnmap will be filled, even if they exceed the max number expected by the game, so you can always be sure that all your spawn locations will be filled.
-* The one caveat to this is that there is a limit if 1 instance of a location type to each "
-
-
-### Spawnmap Creation Hints
-
-* Bring the spawn color table into your paint tool as a separate layer, or tabbed image, for easy access. Use the eye dropper on it to quickly select a spawn color.
-* Draw spawn areas using a pencil tool NOT brush, as you want a hard edge and no color variation. Use a size that can be seen easily without having to zoom in. Slight randomization of the spawn location won't matter (see the example images).
-* Place your heightmap/biomemap background layers so you can easily see where you are placing spawns.
-* Use a separate layer for each spawn type (bosses, markers, buildings etc.), then you can easily change the type of all of them in one go.
-
-
-## Forestmap
-The forest map controls the spawning of trees. By default this will only affect the Meadows and Plains trees (as in vanilla). You can also set the "Forest Factor Overrides All Trees" to have forest factor (whether from vanilla procedural generation or the forestmap) control tree spawning in *all* biomes. i.e. You can have clearings in the Mistlands, the Swamps and even the Dark Forest! The minimap is also updated to show forest coverage on all biomes when this flag is active.
-### Requirements
-
-* The size and format constraints are the same as the heightmap, however it doesn't need to be the exact same values/format as the heightmap you use. You can use a 4096x4096 HDR heightmap with a 64x64 png forestmap for instance.
-
----
-# Notes
-## When Settings are Applied
-The settings you have specified (including the heightmap) are baked into the world when you first create it (when you press the "Create" button). Any further changes you make to the heightmap image or parameters will NOT affect existing worlds.
-
-## Multiplayer Sync
-The settings baked into the world (including the heightmap) are automatically transferred from server to client when clients connect, so you don't have to worry about them having differing settings (of course they DO need the mod installed though).
-
-## Results May Vary
-It is totally possible to make quite ugly terrain (massive sharp spikes etc.) when using the heightmap parameters, you should certainly use the debugmode flying to check out the quality of the terrain before commiting to playing a world if you are worried about this.
-
-## Placement
-You might want to check the log after creating your world to confirm it placed sufficient instances of buildings / spawns etc.
-It isn't necessary for all of them to be placed (your game won't be affected noticeably if it only placed 200 TrollCave02 out of 300), but you might want to confirm at least some of the ones you care about are.
-The log file is at [font=Courier New]C:\Users\<User Name>\AppData\LocalLow\IronGate\Valheim\Player.log[/font].
-
-The log entries showing failure to place things look like this:  
-`03/12/2021 12:57:39: Failed to place all GoblinCamp2, placed 188 out of 200`
-
-They are clustered together between the line:  
-`Checking for location duplicates`  
-and  
-`Done generating locations, duration:50580.087 ms`  
-The vanilla map generator can also fail to place all objects, it is not something specific to this mod, but of course with changes in the generation comes the chance for changes in placement success rate.
-
-## Difficulty
-I'm not sure if this makes the game more difficult or not. Certainly oceans can be a lot wider in some places, and just your starting continent might stretch over most of the map. But that means it likely contains all biomes and bosses.
-
-## Reveal the whole map
-Once you generate a new map you can view the whole result like so (you might want to confirm it meets your requirements):
-
-1. Open the console with F5
-2. Enter:  
-    `imacheater`  
-    `exploremap`
-3. The whole map will be revealed, however it takes a while for it to fully generate, about 2 minutes on my PC.
-4. To rehide the map you can enter `resetmap`
-
----
-# Possible Future Development
-
-* DONE ~~ Allow pre-mod worlds to still work correctly~~
-* DONE ~~ Expose parameters via configuration file~~
-* DONE ~~ Allow use of image as base height map~~
-* Determine a set of parameter presets for different effects
-* Integrate FastNoiseLite to introduce alternative noise types for variation
-* Integrate a base heightmap pre-gen step to allow more time consuming or holistic techniques (e.g. erosion, tectonics, other physical processes etc.)
-* Calculate biomes using results from pre-gen physical modeling / simulation. e.g. use deposition to determine plains, erosion to determine mountains etc.

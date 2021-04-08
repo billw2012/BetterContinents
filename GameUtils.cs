@@ -6,9 +6,7 @@ using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
 using HarmonyLib;
-using Unity.Jobs;
 using UnityEngine;
-using UnityEngine.UI;
 using Object = UnityEngine.Object;
 
 namespace BetterContinents

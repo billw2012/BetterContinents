@@ -1,7 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.IO;
-using HarmonyLib;
 using UnityEngine;
 
 namespace BetterContinents
@@ -12,7 +11,7 @@ namespace BetterContinents
         public struct BetterContinentsSettings
         {
             // Add new properties at the end, and comment where new versions start
-            public const int LatestVersion = 5;
+            public const int LatestVersion = 6;
             
             // Version 1
             public int Version;
@@ -64,6 +63,10 @@ namespace BetterContinents
             public bool MountainsAllowedAtCenter;
 
             public bool ForestFactorOverrideAllTrees;
+            
+            // Version 6
+            public bool HeightmapOverrideAll;
+            public float HeightmapMask;
 
             // Non-serialized
             private ImageMapFloat Heightmap;
@@ -79,10 +82,8 @@ namespace BetterContinents
             public bool HasRoughmap => this.Roughmap != null;
             public bool HasFlatmap => this.Flatmap != null;
             public bool HasForestmap => this.Forestmap != null;
-            
-            public bool OverrideBiomes => this.Biomemap != null;
-            public bool UseSpawnmap => this.Spawnmap != null;
-            public bool UseRoughmap => this.Roughmap != null;
+
+            public bool ShouldHeightmapOverrideAll => this.HasHeightmap && this.HeightmapOverrideAll;
             
             public static BetterContinentsSettings Create(long worldUId)
             {
@@ -168,6 +169,8 @@ namespace BetterContinents
                         SetHeightmapAmount(ConfigHeightmapAmount.Value);
                         SetHeightmapBlend(ConfigHeightmapBlend.Value);
                         SetHeightmapAdd(ConfigHeightmapAdd.Value);
+                        SetHeightmapMask(ConfigHeightmapMask.Value);
+                        SetHeightmapOverrideAll(ConfigHeightmapOverrideAll.Value);
 
                         Heightmap = new ImageMapFloat(heightmapPath);
                         if (!Heightmap.LoadSourceImage() || !Heightmap.CreateMap())
@@ -265,6 +268,8 @@ namespace BetterContinents
             public void SetHeightmapAmount(float heightmapAmount) => HeightmapAmount = heightmapAmount;
             public void SetHeightmapBlend(float heightmapBlend) => HeightmapBlend = heightmapBlend;
             public void SetHeightmapAdd(float heightmapAdd) => HeightmapAdd = heightmapAdd;
+            public void SetHeightmapMask(float heightmapMask) => HeightmapMask = heightmapMask;
+            public void SetHeightmapOverrideAll(bool heightmapOverrideAll) => HeightmapOverrideAll = heightmapOverrideAll;
             
             public void SetRoughmapBlend(float roughmapBlend) => RoughmapBlend = roughmapBlend;
 
@@ -419,7 +424,11 @@ namespace BetterContinents
                     if (Heightmap != null)
                     {
                         output($"Heightmap file {Heightmap.FilePath}");
-                        output($"Heightmap size {Heightmap.Size}x{Heightmap.Size}, amount {HeightmapAmount}, blend {HeightmapBlend}, add {HeightmapAdd}");
+                        output($"Heightmap size {Heightmap.Size}x{Heightmap.Size}, amount {HeightmapAmount}, blend {HeightmapBlend}, add {HeightmapAdd}, mask {HeightmapMask}");
+                        if (HeightmapOverrideAll)
+                        {
+                            output($"Heightmap overrides ALL");
+                        }
                     }
                     else
                     {
@@ -578,6 +587,9 @@ namespace BetterContinents
                     }
                     
                     // Version 4
+                    // (nothing)
+
+                    // Version 5
                     if (Version >= 5)
                     {
                         pkg.Write(Roughmap?.FilePath ?? string.Empty);
@@ -609,6 +621,13 @@ namespace BetterContinents
                         pkg.Write(DisableMapEdgeDropoff);
                         pkg.Write(MountainsAllowedAtCenter);
                         pkg.Write(ForestFactorOverrideAllTrees);
+                    }
+                    
+                    // Version 6
+                    if (Version >= 6)
+                    {
+                        pkg.Write(HeightmapOverrideAll);
+                        pkg.Write(HeightmapMask);
                     }
                 }
             }
@@ -704,7 +723,7 @@ namespace BetterContinents
                     }
                     
                     // Version 4
-                    // Nothing...
+                    // (nothing)
                     
                     // Version 5
                     if (Version >= 5)
@@ -751,19 +770,31 @@ namespace BetterContinents
                         MountainsAllowedAtCenter = pkg.ReadBool();
                         ForestFactorOverrideAllTrees = pkg.ReadBool();
                     }
+
+                    // Version 6
+                    if (Version >= 6)
+                    {
+                        HeightmapOverrideAll = pkg.ReadBool();
+                        HeightmapMask = pkg.ReadSingle();
+                    }
+                    else
+                    {
+                        HeightmapOverrideAll = false;
+                        HeightmapMask = 0;
+                    }
                 }
             }
 
             public float ApplyHeightmap(float x, float y, float height)
             {
-                if (this.Heightmap == null || (this.HeightmapBlend == 0 && this.HeightmapAdd == 0))
+                if (this.Heightmap == null || (this.HeightmapBlend == 0 && this.HeightmapAdd == 0 && this.HeightmapMask == 0))
                 {
                     return height;
                 }
 
                 float h = this.Heightmap.GetValue(x, y);
-
-                return Mathf.Lerp(height, h * HeightmapAmount, this.HeightmapBlend) + h * this.HeightmapAdd;
+                float blendedHeight = Mathf.Lerp(height, h * HeightmapAmount, this.HeightmapBlend);
+                return Mathf.Lerp(blendedHeight, blendedHeight * h, HeightmapMask) + h * this.HeightmapAdd;
             }
             
             public float ApplyRoughmap(float x, float y, float smoothHeight, float roughHeight)
@@ -780,6 +811,11 @@ namespace BetterContinents
             
             public float ApplyFlatmap(float x, float y, float flatHeight, float height)
             {
+                if (Settings.ShouldHeightmapOverrideAll)
+                {
+                    return flatHeight;
+                }
+                
                 if ((this.UseRoughInvertedAsFlat && this.Roughmap == null) || (!this.UseRoughInvertedAsFlat && this.Flatmap == null) || this.RoughmapBlend == 0)
                 {
                     return height;

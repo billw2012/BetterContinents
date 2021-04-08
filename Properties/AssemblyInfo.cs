@@ -20,7 +20,7 @@ using BetterContinents;
 [assembly: ComVisible(false)]
 
 // The following GUID is for the ID of the typelib if this project is exposed to COM
-[assembly: Guid("F78D7950-17B1-46CD-9CBC-B1E465738C88")]
+[assembly: Guid("5EC9263D-7D5C-46BC-AEDA-1BF3160960A6")]
 
 // Version information for an assembly consists of the following four values:
 //

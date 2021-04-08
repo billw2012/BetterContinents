@@ -1,13 +1,9 @@
-﻿using System;
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
-using System.Threading.Tasks;
 using SixLabors.ImageSharp;
 using SixLabors.ImageSharp.PixelFormats;
 using UnityEngine;
-using Color = UnityEngine.Color;
-using Debug = UnityEngine.Debug;
 
 namespace BetterContinents
 {

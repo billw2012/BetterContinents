@@ -14,8 +14,8 @@ namespace BetterContinents
 
         private static readonly string[] Bosses =
         {
-            "StartTemple", "Eikthymir", "GDKing", "GoblinKing", "Bonemass", "Dragonqueen",
-            "Vendor"
+            "StartTemple", "Eikthyrnir", "GDKing", "GoblinKing", "Bonemass", "Dragonqueen",
+            "Vendor_BlackForest"
         };
         static DebugUtils()
         {
@@ -89,8 +89,7 @@ namespace BetterContinents
             });
             AddCommand("bosses", "show pins for bosses, start temple and trader", _ =>
             {
-                GameUtils.ShowOnMap("StartTemple", "Eikthymir", "GDKing", "GoblinKing", "Bonemass", "Dragonqueen",
-                    "Vendor");
+                GameUtils.ShowOnMap(Bosses);
             });
             // AddCommand("show", "pin all locations on the map", _ =>
             // {
@@ -195,9 +194,11 @@ namespace BetterContinents
                         else
                             BetterContinents.Settings.SetHeightmapPath(args);
                     });
+                    AddHeightmapSubcommand(subcmd, "ov", "heightmap override all", "(0 to disable, 1 to enable)", args => BetterContinents.Settings.SetHeightmapOverrideAll(int.Parse(args) != 0));
                     AddHeightmapSubcommand(subcmd, "am", "heightmap amount", "(between 0 and 5)", args => BetterContinents.Settings.SetHeightmapAmount(float.Parse(args)));
                     AddHeightmapSubcommand(subcmd, "bl", "heightmap blend", "(between 0 and 1)", args => BetterContinents.Settings.SetHeightmapBlend(float.Parse(args)));
                     AddHeightmapSubcommand(subcmd, "ad", "heightmap add", "(between -1 and 1)", args => BetterContinents.Settings.SetHeightmapAdd(float.Parse(args)));
+                    AddHeightmapSubcommand(subcmd, "ma", "heightmap mask", "(between 0 and 1)", args => BetterContinents.Settings.SetHeightmapMask(float.Parse(args)));
                 });
                 command.AddSubcommand("r", "roughmap settings, get more info with 'bc param r help'", subcmdConfig: subcmd =>
                 {

@@ -78,13 +78,20 @@ namespace BetterContinents
             [HarmonyPostfix, HarmonyPatch("GetBiomeHeight")]
             private static void GetBiomeHeightPostfix(WorldGenerator __instance, float wx, float wy, ref float __result, World ___m_world)
             {
-                if (!Settings.EnabledForThisWorld || ___m_world.m_menu || !Settings.UseRoughmap)
+                if (!Settings.EnabledForThisWorld || ___m_world.m_menu)
                 {
                     return;
                 }
 
+                if (!Settings.ShouldHeightmapOverrideAll && !Settings.HasRoughmap)
+                {
+                    return;
+                }
+                
                 float smoothHeight = GetBaseHeightMethod(__instance, wx, wy, false) * 200f;
-                __result = Settings.ApplyRoughmap(NormalizedX(wx), NormalizedY(wy), smoothHeight, __result);
+                __result = Settings.ShouldHeightmapOverrideAll 
+                    ? smoothHeight 
+                    : Settings.ApplyRoughmap(NormalizedX(wx), NormalizedY(wy), smoothHeight, __result);
             }
 
             private static float GetBaseHeightV1(float wx, float wy, float ___m_offset0, float ___m_offset1, float ___m_minMountainDistance)
@@ -112,7 +119,9 @@ namespace BetterContinents
 
                 // https://www.desmos.com/calculator/uq8wmu6dy7
                 float SigmoidActivation(float x, float a, float b) => 1 / (1 + Mathf.Exp(a + b * x));
-                float lerp = Mathf.Clamp01(SigmoidActivation(Mathf.PerlinNoise(wx * 0.005f - 10000, wy * 0.005f - 5000) - Settings.RidgeBlendSigmoidXOffset, 0, Settings.RidgeBlendSigmoidB));
+                float lerp = Settings.ShouldHeightmapOverrideAll 
+                    ? 0 
+                    : Mathf.Clamp01(SigmoidActivation(Mathf.PerlinNoise(wx * 0.005f - 10000, wy * 0.005f - 5000) - Settings.RidgeBlendSigmoidXOffset, 0, Settings.RidgeBlendSigmoidB));
                 
                 float finalHeight = 0f;
 
@@ -130,7 +139,7 @@ namespace BetterContinents
 
                 finalHeight += Settings.SeaLevelAdjustment;
 
-                if (Settings.OceanChannelsEnabled)
+                if (Settings.OceanChannelsEnabled && !Settings.ShouldHeightmapOverrideAll)
                 {
                     float v = Mathf.Abs(
                         Mathf.PerlinNoise(wx * 0.002f * 0.25f + 0.123f, wy * 0.002f * 0.25f + 0.15123f) -
@@ -150,7 +159,7 @@ namespace BetterContinents
                         finalHeight = Mathf.Lerp(finalHeight, -2f, t2);
                     }
                 }
-                if (distance < ___m_minMountainDistance && finalHeight > 0.28f)
+                if (distance < ___m_minMountainDistance && finalHeight > 0.28f && !Settings.ShouldHeightmapOverrideAll)
                 {
                     float t3 = Mathf.Clamp01((finalHeight - 0.28f) / 0.099999994f);
                     finalHeight = Mathf.Lerp(Mathf.Lerp(0.28f, 0.38f, t3), finalHeight, Utils.LerpStep(___m_minMountainDistance - 400f, ___m_minMountainDistance, distance));
@@ -238,7 +247,7 @@ namespace BetterContinents
             [HarmonyPrefix, HarmonyPatch(nameof(WorldGenerator.GetBiome), typeof(float), typeof(float)), HarmonyAfter("org.github.spacedrive.worldgen")]
             private static bool GetBiomePrefix(float wx, float wy, ref Heightmap.Biome __result, World ___m_world)
             {
-                if (!Settings.EnabledForThisWorld || ___m_world.m_menu || !Settings.OverrideBiomes)
+                if (!Settings.EnabledForThisWorld || ___m_world.m_menu || !Settings.HasBiomemap)
                 {
                     return true;
                 }
