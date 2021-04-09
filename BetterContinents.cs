@@ -2,7 +2,6 @@ using BepInEx;
 using BepInEx.Configuration;
 using HarmonyLib;
 using UnityEngine;
-using UnityEngine.UI;
 using Debug = UnityEngine.Debug;
 
 namespace BetterContinents
@@ -12,6 +11,8 @@ namespace BetterContinents
     {
         // See the Awake function for the config descriptions
         public static ConfigEntry<int> NexusID;
+        public static ConfigEntry<string> ConfigSelectedPreset;
+        
         public static ConfigEntry<bool> ConfigEnabled;
         
         public static ConfigEntry<float> ConfigContinentSize;
@@ -142,7 +143,8 @@ namespace BetterContinents
                     .Value("Debug Mode").Description("Automatically reveals the full map on respawn, enables cheat mode, and debug mode, for debugging purposes").Bind(out ConfigDebugModeEnabled)
                     .Value("Skip Default Location Placement").Description("Skips default location placement during world gen (spawn temple and spawnmap are still placed), for quickly testing the heightmap itself").Bind(out ConfigDebugSkipDefaultLocationPlacement)
                 .Group("BetterContinents.Misc")
-                    .Value("NexusID").Default(446).Description("For Nexus Update Check compatibility").Bind(out NexusID);
+                    .Value("NexusID").Default(446).Description("For Nexus Update Check compatibility").Bind(out NexusID)
+                    .Value("SelectedPreset").Default("Vanilla").Description("The name of the currently selected preset, as used in the Create World dialog").Bind(out ConfigSelectedPreset);
                 ;
 
             new Harmony("BetterContinents.Harmony").PatchAll();
@@ -299,18 +301,5 @@ namespace BetterContinents
         }
         
         // Show the connection error message
-        [HarmonyPatch(typeof(FejdStartup))]
-        private class FejdStartupPatch
-        {
-            [HarmonyPostfix, HarmonyPatch("ShowConnectError")]
-            private static void ShowConnectErrorPrefix(Text ___m_connectionFailedError)
-            {
-                if (LastConnectionError != null)
-                {
-                    ___m_connectionFailedError.text = LastConnectionError;
-                    LastConnectionError = null;
-                }
-            }
-        }
     }
 }

@@ -32,18 +32,14 @@ namespace BetterContinents
                     // Load in our settings for this world
                     try
                     {
-                        using (var binaryReader = new BinaryReader(File.OpenRead(world.GetMetaPath() + ".BetterContinents")))
+                        var newSettings = BetterContinentsSettings.Load(world.GetMetaPath() + ".BetterContinents");
+                        if (newSettings.WorldUId != world.m_uid)
                         {
-                            int count = binaryReader.ReadInt32();
-                            var newSettings = BetterContinentsSettings.Load(new ZPackage(binaryReader.ReadBytes(count)));
-                            if (newSettings.WorldUId != world.m_uid)
-                            {
-                                LogError($"ID in saved settings for {world.m_name} didn't match, mod is disabled for this World");
-                            }
-                            else
-                            {
-                                Settings = newSettings;
-                            }
+                            LogError($"ID in saved settings for {world.m_name} didn't match, mod is disabled for this World");
+                        }
+                        else
+                        {
+                            Settings = newSettings;
                         }
                     }
                     catch

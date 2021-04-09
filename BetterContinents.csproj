@@ -13,6 +13,7 @@
     <TargetFrameworkVersion>v4.7.2</TargetFrameworkVersion>
     <FileAlignment>512</FileAlignment>
     <DisableFody Condition="'$(Configuration)' == 'Debug'">true</DisableFody>
+    <LangVersion>8</LangVersion>
   </PropertyGroup>
   <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Debug|AnyCPU' ">
     <PlatformTarget>AnyCPU</PlatformTarget>
@@ -195,6 +196,10 @@
       <HintPath>..\..\..\..\..\Program Files (x86)\Steam\steamapps\common\Valheim\unstripped_managed\UnityEngine.dll</HintPath>
       <Private>False</Private>
     </Reference>
+    <Reference Include="UnityEngine.AssetBundleModule, Version=0.0.0.0, Culture=neutral, PublicKeyToken=null">
+      <HintPath>..\..\..\..\..\Program Files (x86)\Steam\steamapps\common\Valheim\unstripped_managed\UnityEngine.AssetBundleModule.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
     <Reference Include="UnityEngine.CoreModule, Version=0.0.0.0, Culture=neutral, PublicKeyToken=null">
       <HintPath>..\..\..\..\..\Program Files (x86)\Steam\steamapps\common\Valheim\unstripped_managed\UnityEngine.CoreModule.dll</HintPath>
       <Private>False</Private>
@@ -228,6 +233,7 @@
     <Compile Include="BetterContinents.BetterContinentsSettings.cs" />
     <Compile Include="BetterContinents.ConsolePatch.cs" />
     <Compile Include="BetterContinents.cs" />
+    <Compile Include="BetterContinents.FejdStartupPatch.cs" />
     <Compile Include="BetterContinents.WorldGeneratorPatch.cs" />
     <Compile Include="BetterContinents.WorldPatch.cs" />
     <Compile Include="BetterContinents.ZNetPatch.cs" />
@@ -236,6 +242,7 @@
     <Compile Include="ConfigHelpers.cs" />
     <Compile Include="ConfigurationManagerAttributes.cs" />
     <Compile Include="DebugUtils.cs" />
+    <Compile Include="ExtensionMethods.cs" />
     <Compile Include="FastNoiseLite\FastNoiseLite.cs" />
     <Compile Include="GameUtils.cs" />
     <Compile Include="ImageMapBase.cs" />
@@ -243,6 +250,8 @@
     <Compile Include="ImageMapFloat.cs" />
     <Compile Include="ImageMapSpawn.cs" />
     <Compile Include="Mod.Info.cs" />
+    <Compile Include="PrefabFix.cs" />
+    <Compile Include="Presets.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
     <Compile Include="UI.cs" />
   </ItemGroup>
@@ -250,6 +259,8 @@
     <None Include="packages.config" />
   </ItemGroup>
   <ItemGroup>
+    <EmbeddedResource Include="assets\BCAssets\AssetBundles\StandaloneWindows\bcassets" />
+    <Content Include=".gitignore" />
     <Content Include="FodyWeavers.xml" />
     <Content Include="Vegetation.txt" />
   </ItemGroup>

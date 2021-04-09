@@ -21,9 +21,9 @@ namespace BetterContinents
                 // So if that metadata doesn't exist it means the world is being created now.
                 if (!File.Exists(__instance.GetMetaPath()))
                 {
-                    // World is being created, so bake our settings as they currently are.
-                    Log($"First time save of {__instance.m_name}, baking settings");
-                    settingsToSave = BetterContinentsSettings.Create(__instance.m_uid);
+                    // World is being created, so bake our settings from the preset
+                    Log($"First time save of {__instance.m_name}, applying selected preset {ConfigSelectedPreset.Value}");
+                    settingsToSave = Presets.LoadActivePreset(__instance.m_uid);
                 }
                 else
                 {
@@ -31,20 +31,11 @@ namespace BetterContinents
                 }
                 settingsToSave.Dump();
 
-                var zpackage = new ZPackage();
-                settingsToSave.Serialize(zpackage);
-                
                 // Duplicating the careful behaviour of the metadata save function
                 string ourMetaPath = __instance.GetMetaPath() + ".BetterContinents";
                 string newName = ourMetaPath + ".new";
                 string oldName = ourMetaPath + ".old";
-                byte[] binaryData = zpackage.GetArray();
-                Directory.CreateDirectory(Path.GetDirectoryName(ourMetaPath));
-                using (BinaryWriter binaryWriter = new BinaryWriter(File.Create(newName)))
-                {
-                    binaryWriter.Write(binaryData.Length);
-                    binaryWriter.Write(binaryData);
-                }
+                settingsToSave.Save(newName);
                 if (File.Exists(ourMetaPath))
                 {
                     if (File.Exists(oldName))

@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
+using System.Reflection;
 using System.Threading.Tasks;
 using HarmonyLib;
 using UnityEngine;
@@ -39,14 +40,14 @@ namespace BetterContinents
 
         private static Dictionary<ZDOID, ZDO> GetObjectsByID() => ZDOMan.instance.m_objectsByID;
         
-        public static void BeginHeightChanges()
+        public static void BeginTerrainChanges()
         {
             // Stop and reset the heightmap generator first
             HeightmapBuilder.instance.Dispose();
             var _ = new HeightmapBuilder();
         }
 
-        public static void EndHeightChanges()
+        public static void EndTerrainChanges()
         { 
             Refresh();
         }
@@ -264,6 +265,19 @@ namespace BetterContinents
                         )
                     });
             ResetLocPins();
+        }
+        
+        public static AssetBundle GetAssetBundleFromResources(string fileName)
+        {
+            var execAssembly = Assembly.GetExecutingAssembly();
+
+            var resourceName = execAssembly.GetManifestResourceNames()
+                .Single(str => str.EndsWith(fileName));
+
+            using(var stream = execAssembly.GetManifestResourceStream(resourceName))
+            {
+                return AssetBundle.LoadFromStream(stream);
+            }
         }
 
         // [HarmonyPatch(typeof(Player))]

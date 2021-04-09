@@ -638,6 +638,29 @@ namespace BetterContinents
                 settings.Deserialize(pkg);
                 return settings;
             }
+
+            public static BetterContinentsSettings Load(string path)
+            {
+                using (var binaryReader = new BinaryReader(File.OpenRead(path)))
+                {
+                    int count = binaryReader.ReadInt32();
+                    return BetterContinentsSettings.Load(new ZPackage(binaryReader.ReadBytes(count)));
+                }
+            }
+
+            public void Save(string path)
+            {
+                var zpackage = new ZPackage();
+                this.Serialize(zpackage);
+
+                byte[] binaryData = zpackage.GetArray();
+                Directory.CreateDirectory(Path.GetDirectoryName(path));
+                using (BinaryWriter binaryWriter = new BinaryWriter(File.Create(path)))
+                {
+                    binaryWriter.Write(binaryData.Length);
+                    binaryWriter.Write(binaryData);
+                }
+            }
             
             private void Deserialize(ZPackage pkg)
             {

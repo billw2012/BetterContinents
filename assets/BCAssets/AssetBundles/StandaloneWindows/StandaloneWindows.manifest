@@ -1,0 +1,7 @@
+ManifestFileVersion: 0
+CRC: 3864654477
+AssetBundleManifest:
+  AssetBundleInfos:
+    Info_0:
+      Name: bcassets
+      Dependencies: {}

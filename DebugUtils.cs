@@ -29,44 +29,19 @@ namespace BetterContinents
             {
                 string[] maps = args.Split(new[] {' '}, StringSplitOptions.RemoveEmptyEntries);
                 bool all = maps.Contains("all");
-                var HeightAffectingMaps = new[] { "hm", "rm", "fm" };
 
-                bool affectingHeight = maps.Intersect(HeightAffectingMaps).Any(); 
-                if (affectingHeight)
-                {
-                    GameUtils.BeginHeightChanges();
-                }
+                GameUtils.BeginTerrainChanges();
 
-                if (maps.Contains("hm") || all)
-                {
-                    BetterContinents.Settings.ReloadHeightmap();
-                }
-                if (maps.Contains("rm") || all)
-                {
-                    BetterContinents.Settings.ReloadRoughmap();
-                }
-                if (maps.Contains("fm") || all)
-                {
-                    BetterContinents.Settings.ReloadFlatmap();
-                }
-                if (maps.Contains("bm") || all)
-                {
-                    BetterContinents.Settings.ReloadBiomemap();
-                }
-                if (maps.Contains("sm") || all)
-                {
-                    BetterContinents.Settings.ReloadSpawnmap();
-                }
-                if (maps.Contains("fom") || all)
-                {
-                    BetterContinents.Settings.ReloadForestmap();
-                }
+                if (maps.Contains("hm") || all)     BetterContinents.Settings.ReloadHeightmap();
+                if (maps.Contains("rm") || all)     BetterContinents.Settings.ReloadRoughmap();
+                if (maps.Contains("fm") || all)     BetterContinents.Settings.ReloadFlatmap();
+                if (maps.Contains("bm") || all)     BetterContinents.Settings.ReloadBiomemap();
+                if (maps.Contains("sm") || all)     BetterContinents.Settings.ReloadSpawnmap();
+                if (maps.Contains("fom") || all)    BetterContinents.Settings.ReloadForestmap();
             
-                if (affectingHeight)
-                {
-                    GameUtils.EndHeightChanges();
-                }
+                GameUtils.EndTerrainChanges();
             });
+
             AddCommand("locs", "print all location spawn instance counts to the console", _ =>
             {
                 var locationInstances = GameUtils.GetLocationInstances();
@@ -158,14 +133,18 @@ namespace BetterContinents
             AddCommand("scr", "save the minimap to a png", "(optional resolution, default is 2048)", arg => {
                 GameUtils.SaveMinimap(string.IsNullOrEmpty(arg) ? 2048 : int.Parse(arg));
             });
+            AddCommand("savepreset", "save the minimap to a png", "(name)", arg =>
+            {
+                Presets.Save(BetterContinents.Settings, arg);
+            });
 
             void AddHeightmapSubcommand(Command command, string cmd, string desc, string args, Action<string> action)
             {
                 command.AddSubcommand(cmd, desc, args, args2 =>
                 {
-                    GameUtils.BeginHeightChanges();
+                    GameUtils.BeginTerrainChanges();
                     action(args2);
-                    GameUtils.EndHeightChanges();
+                    GameUtils.EndTerrainChanges();
                 });            
             }
 
