@@ -10,6 +10,9 @@ namespace BetterContinents
 {
     public class Presets
     {
+        private static readonly string PresetsDir = Path.Combine(Utils.GetSaveDataPath(), "BetterContinents", "presets");
+        private static AssetBundle assetBundle;
+
         private List<string> presets;
         private const string Disabled = "Disabled";
         private const string FromConfig = "From Config";
@@ -22,7 +25,11 @@ namespace BetterContinents
         {
             var panel = (RectTransform)__instance.m_newWorldSeed.transform.parent;
 
-            var assetBundle = GameUtils.GetAssetBundleFromResources("bcassets");
+            if (assetBundle == null)
+            {
+                assetBundle = GameUtils.GetAssetBundleFromResources("bcassets");
+            }
+
             var prefab = assetBundle.LoadAsset<GameObject>("Assets/BCPresetPrefab.prefab");
 
             var item = Object.Instantiate(prefab, panel);
@@ -39,9 +46,6 @@ namespace BetterContinents
             Refresh();
         }
 
-        private static readonly string PresetsDir = Path.Combine(Utils.GetSaveDataPath(), "BetterContinents", "presets");
-        
-        
         private void Refresh()
         {
             string NameFromPath(string path) => Path.GetFileName(path).UpTo(".").AddSpacesToWords();
@@ -79,13 +83,15 @@ namespace BetterContinents
 
             if (!File.Exists(BetterContinents.ConfigSelectedPreset.Value))
             {
-                BetterContinents.LogError((string) $"Selected preset path {BetterContinents.ConfigSelectedPreset.Value} doesn't exist, BC is disabled for this world!");
+                BetterContinents.LogError($"Selected preset path {BetterContinents.ConfigSelectedPreset.Value} doesn't exist, BC is disabled for this world!");
                 return BetterContinents.BetterContinentsSettings.Disabled(worldId);
             }
                     
             try
             { 
-                return BetterContinents.BetterContinentsSettings.Load(BetterContinents.ConfigSelectedPreset.Value);
+                var settings = BetterContinents.BetterContinentsSettings.Load(BetterContinents.ConfigSelectedPreset.Value);
+                settings.WorldUId = worldId;
+                return settings;
             }
             catch(Exception ex)
             {
