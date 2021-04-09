@@ -52,6 +52,22 @@ namespace BetterContinents
                         }
                     }
                 });
+                
+                UI.Add("Active Hint", () =>
+                {
+                    //if (Game.instance && Game.instance.WaitingForRespawn())//(Hud.instance?.m_loadingScreen.isActiveAndEnabled ?? false)
+                    if(Menu.IsVisible() || Game.instance && Game.instance.WaitingForRespawn())
+                    {
+                        if(BetterContinents.Settings.EnabledForThisWorld)
+                        {
+                            UI.DisplayMessage($"<color=gray><size=20><b>{ModInfo.Name} v{ModInfo.Version}</b>: <color=green>ENABLED</color> for this world</size></color>");
+                        }
+                        else
+                        {
+                            UI.DisplayMessage($"<color=gray><size=20><b>{ModInfo.Name} v{ModInfo.Version}</b>: <color=#505050ff>DISABLED</color> for this world</size></color>");
+                        }
+                    }
+                });
             };
         }
 
