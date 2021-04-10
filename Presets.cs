@@ -13,11 +13,19 @@ namespace BetterContinents
         private static readonly string PresetsDir = Path.Combine(Utils.GetSaveDataPath(), "BetterContinents", "presets");
         private static AssetBundle assetBundle;
 
+        private static bool DisabledPreset => BetterContinents.ConfigSelectedPreset.Value == Disabled;
+        private static bool ConfigPreset => BetterContinents.ConfigSelectedPreset.Value == FromConfig;
+
         private List<string> presets;
         private const string Disabled = "Disabled";
         private const string FromConfig = "From Config";
 
         private Dropdown dropdown;
+        private GameObject previewPanel;
+        private RawImage previewImage;
+
+        private Texture2D logoIcon;
+        private Texture2D settingsIcon;
                 
         public Presets() { Refresh(); }
 
@@ -29,23 +37,65 @@ namespace BetterContinents
             {
                 assetBundle = GameUtils.GetAssetBundleFromResources("bcassets");
             }
+            
+            logoIcon = assetBundle.LoadAsset<Texture2D>("Assets/logo256.png");
+            settingsIcon = assetBundle.LoadAsset<Texture2D>("Assets/settings256.png");
 
             var prefab = assetBundle.LoadAsset<GameObject>("Assets/BCPresetPrefab.prefab");
 
             var item = Object.Instantiate(prefab, panel);
             item.FixReferences(typeof(Image));
 
+            previewPanel = item.transform.Find("MapPreview").gameObject;
+            previewImage = previewPanel.GetComponentInChildren<RawImage>();
+            previewPanel.SetActive(false);
+            
             dropdown = item.GetComponentInChildren<Dropdown>();
             dropdown.onValueChanged.AddListener(idx =>
             {
                 if (idx >= 0 && idx < presets.Count)
                 {
                     BetterContinents.ConfigSelectedPreset.Value = presets[idx];
+                    UpdatePreview();
                 }
             });
             Refresh();
+            UpdatePreview();
         }
 
+        private void UpdatePreview()
+        {
+            if (previewPanel != null)
+            {
+                if (DisabledPreset)
+                {
+                    previewPanel.SetActive(false);
+                }
+                else if(ConfigPreset)
+                {
+                    previewPanel.SetActive(true);
+                    previewImage.texture = settingsIcon;
+                }
+                else
+                {
+                    previewPanel.SetActive(true);
+                    var configIconPath =
+                        Path.Combine(Path.GetDirectoryName(BetterContinents.ConfigSelectedPreset.Value),
+                            BetterContinents.ConfigSelectedPreset.Value.UpTo(".") + ".png");
+                    if (File.Exists(configIconPath))
+                    {
+                        var icon = new Texture2D(2, 2);
+                        icon.LoadImage(File.ReadAllBytes(configIconPath));
+                        previewImage.texture = icon;
+                    }
+                    else
+                    {
+                        previewImage.texture = logoIcon;
+                    }
+                }
+            }
+        }
+        
         private void Refresh()
         {
             string NameFromPath(string path) => Path.GetFileName(path).UpTo(".").AddSpacesToWords();
@@ -67,16 +117,18 @@ namespace BetterContinents
                     dropdown.SetValueWithoutNotify(idx);
                 }
             }
-        }
 
+            UpdatePreview();
+        }
+        
         public static BetterContinents.BetterContinentsSettings LoadActivePreset(long worldId)
         {
-            if (BetterContinents.ConfigSelectedPreset.Value == Disabled)
+            if (DisabledPreset)
             {
                 return BetterContinents.BetterContinentsSettings.Disabled(worldId);
             }
 
-            if (BetterContinents.ConfigSelectedPreset.Value == FromConfig)
+            if (ConfigPreset)
             {
                 return BetterContinents.BetterContinentsSettings.Create(worldId);
             }

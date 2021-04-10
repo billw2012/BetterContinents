@@ -1,12 +1,12 @@
 ManifestFileVersion: 0
-CRC: 2692905912
+CRC: 60771731
 Hashes:
   AssetFileHash:
     serializedVersion: 2
-    Hash: 437c55d49911294328d1e03162def56f
+    Hash: f1149237f9d1a4a218048a9bff24dcbd
   TypeTreeHash:
     serializedVersion: 2
-    Hash: 9cc1f3111f03a05a8f9d62e9259de709
+    Hash: 1f6ca94c350fccf46a0dcfba28914332
 HashAppended: 0
 ClassTypes:
 - Class: 1
@@ -28,6 +28,8 @@ ClassTypes:
 - Class: 114
   Script: {fileID: 11500000, guid: 1aa08ab6e0800fa44ae55d278d1423e3, type: 3}
 - Class: 114
+  Script: {fileID: 11500000, guid: 1344c3c82d62a2a41a3576d8abb8e3ea, type: 3}
+- Class: 114
   Script: {fileID: 11500000, guid: 59f8146938fff824cb5fd77236b75775, type: 3}
 - Class: 114
   Script: {fileID: 11500000, guid: e19747de3f5aca642ab2be37e372fb86, type: 3}
@@ -47,5 +49,7 @@ ClassTypes:
   Script: {instanceID: 0}
 SerializeReferenceClassIdentifiers: []
 Assets:
+- Assets/settings256.png
 - Assets/BCPresetPrefab.prefab
+- Assets/logo256.png
 Dependencies: []

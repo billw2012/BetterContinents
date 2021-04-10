@@ -27,6 +27,7 @@ namespace BetterContinents
                 "tunnel_web",
             };
             
+            //private static Noise 
             [HarmonyPrefix, HarmonyPatch(nameof(WorldGenerator.Initialize))]
             private static void InitializePrefix(World world)
             {
@@ -240,6 +241,81 @@ namespace BetterContinents
                 }
                 return finalHeight;
             }
+            
+            // private static float GetBaseHeightV3(float wx, float wy, float ___m_offset0, float ___m_offset1, float ___m_minMountainDistance)
+            // {
+            //     float distance = Utils.Length(wx, wy);
+            //     
+            //     // The base map x, y coordinates in 0..1 range
+            //     float mapX = NormalizedX(wx);
+            //     float mapY = NormalizedY(wy);
+            //     
+            //     wx *= Settings.GlobalScale;
+            //     wy *= Settings.GlobalScale;
+            //
+            //     // float WarpScale = 0.001f * Settings.RidgeScale;
+            //
+            //     // float warpX = (Mathf.PerlinNoise(wx * WarpScale, wy * WarpScale) - 0.5f) * WorldSize;
+            //     // float warpY = (Mathf.PerlinNoise(wx * WarpScale + 2f, wy * WarpScale + 3f) - 0.5f) * WorldSize;
+            //     //
+            //     // wx += 100000f + ___m_offset0;
+            //     // wy += 100000f + ___m_offset1;
+            //     //
+            //     // float bigFeatureNoiseHeight = Mathf.PerlinNoise(wx * 0.002f * 0.5f, wy * 0.002f * 0.5f) * Mathf.PerlinNoise(wx * 0.003f * 0.5f, wy * 0.003f * 0.5f) * 1f;
+            //     // float bigFeatureHeight = Settings.ApplyHeightmap(mapX, mapY, bigFeatureNoiseHeight);
+            //     // float ridgeHeight = (Mathf.PerlinNoise(warpX * 0.002f * 0.5f, warpY * 0.002f * 0.5f) * Mathf.PerlinNoise(warpX * 0.003f * 0.5f, warpY * 0.003f * 0.5f)) * Settings.MaxRidgeHeight;
+            //     //
+            //     // // https://www.desmos.com/calculator/uq8wmu6dy7
+            //     // float SigmoidActivation(float x, float a, float b) => 1 / (1 + Mathf.Exp(a + b * x));
+            //     // float lerp = Mathf.Clamp01(SigmoidActivation(Mathf.PerlinNoise(wx * 0.005f - 10000, wy * 0.005f - 5000) - Settings.RidgeBlendSigmoidXOffset, 0, Settings.RidgeBlendSigmoidB));
+            //     //
+            //     // float bigFeature = Mathf.Clamp01(bigFeatureHeight + ridgeHeight * lerp);
+            //     //
+            //     // const float SeaLevel = 0.05f;
+            //     // float ApplyMountains(float x, float n) => x * (1 - Mathf.Pow(1 - x, 1.2f + n * 0.8f)) + x * (1 - x);
+            //     //
+            //     // float detailedFinalHeight = ApplyMountains(bigFeature - SeaLevel, Settings.MountainsAmount) + SeaLevel;
+            //     //
+            //     // // Finer height variation
+            //     // detailedFinalHeight += Mathf.PerlinNoise(wx * 0.002f * 1f, wy * 0.002f * 1f) * Mathf.PerlinNoise(wx * 0.003f * 1f, wy * 0.003f * 1f) * detailedFinalHeight * 0.9f;
+            //     // detailedFinalHeight += Mathf.PerlinNoise(wx * 0.005f * 1f, wy * 0.005f * 1f) * Mathf.PerlinNoise(wx * 0.01f * 1f, wy * 0.01f * 1f) * 0.5f * detailedFinalHeight;
+            //     //
+            //     // float finalHeight = Settings.ApplyFlatmap(mapX, mapY, bigFeatureHeight, detailedFinalHeight);
+            //     //
+            //     // finalHeight -= 0.07f;
+            //
+            //     //
+            //     // if (Settings.OceanChannelsEnabled)
+            //     // {
+            //     //     float v = Mathf.Abs(
+            //     //         Mathf.PerlinNoise(wx * 0.002f * 0.25f + 0.123f, wy * 0.002f * 0.25f + 0.15123f) -
+            //     //         Mathf.PerlinNoise(wx * 0.002f * 0.25f + 0.321f, wy * 0.002f * 0.25f + 0.231f));
+            //     //     finalHeight *= 1f - (1f - Utils.LerpStep(0.02f, 0.12f, v)) *
+            //     //         Utils.SmoothStep(744f, 1000f, distance);
+            //     // }
+            //     
+            //     finalHeight += Settings.SeaLevelAdjustment;
+            //
+            //     // Edge of the world
+            //     if (!Settings.DisableMapEdgeDropoff && distance > 10000f)
+            //     {
+            //         float t = Utils.LerpStep(10000f, 10500f, distance);
+            //         finalHeight = Mathf.Lerp(finalHeight, -0.2f, t);
+            //         if (distance > 10490f)
+            //         {
+            //             float t2 = Utils.LerpStep(10490f, 10500f, distance);
+            //             finalHeight = Mathf.Lerp(finalHeight, -2f, t2);
+            //         }
+            //     }
+            //     
+            //     // Avoid mountains in the center
+            //     if (!Settings.MountainsAllowedAtCenter && distance < ___m_minMountainDistance && finalHeight > 0.28f)
+            //     {
+            //         float t3 = Mathf.Clamp01((finalHeight - 0.28f) / 0.099999994f);
+            //         finalHeight = Mathf.Lerp(Mathf.Lerp(0.28f, 0.38f, t3), finalHeight, Utils.LerpStep(___m_minMountainDistance - 400f, ___m_minMountainDistance, distance));
+            //     }
+            //     return finalHeight;
+            // }
 
             // We must come after WorldGenOptions, as that mod always replaces the GetBiome function.
             // Note in HarmonyX (which BepInEx uses), all prefixes always run, unless they opt out themselves.
