@@ -119,12 +119,10 @@ namespace BetterContinents
             Minimap.instance.ForceRegen();
             Minimap.instance.ExploreAll();
         }
-
-        public static string GetScreenShotDir() => Path.Combine(Utils.GetSaveDataPath(), "BetterContinents", WorldGenerator.instance.m_world.m_name);
-
-        public static void SaveMinimap(int size)
+        
+        public static void SaveMinimap(string path, int size)
         {
-            BetterContinents.instance.StartCoroutine(SaveMinimapImpl(size));
+            BetterContinents.instance.StartCoroutine(SaveMinimapImpl(path, size));
         }
 
         private static GameObject CreateQuad(float width, float height, float z, Material material)
@@ -177,8 +175,38 @@ namespace BetterContinents
 
             return gameObject;
         }
+
+        private static Texture CloudTexture;
+        private static Texture TransparentTexture;
+
+        private static bool MinimapCloudsEnabled =>
+            Minimap.instance.m_mapImageLarge.material.GetTexture("_CloudTex") != TransparentTexture;
+
+        private static void EnableMinimapClouds()
+        {
+            if (!MinimapCloudsEnabled)
+            {
+                Minimap.instance.m_mapImageLarge.material.SetTexture("_CloudTex", CloudTexture);
+            }
+        }
         
-        private static IEnumerator SaveMinimapImpl(int size)
+        private static void DisableMinimapClouds()
+        {
+            if(MinimapCloudsEnabled)
+            {
+                var mat = Minimap.instance.m_mapImageLarge.material;
+
+                CloudTexture = mat.GetTexture("_CloudTex");
+                if (TransparentTexture == null)
+                {
+                    TransparentTexture = UI.CreateFillTexture(new Color32(0, 0, 0, 0));
+                }
+
+                mat.SetTexture("_CloudTex", TransparentTexture);
+            }
+        }
+        
+        private static IEnumerator SaveMinimapImpl(string path, int size)
         {
             bool wasLarge = Minimap.instance.m_largeRoot.activeSelf;
             if (!wasLarge)
@@ -187,6 +215,9 @@ namespace BetterContinents
                 Minimap.instance.CenterMap(Vector3.zero);
             }
 
+            bool wasClouds = MinimapCloudsEnabled;
+            DisableMinimapClouds();
+            
             var mapPanelObject = CreateQuad(100, 100, 10, Minimap.instance.m_mapImageLarge.material);
 
             mapPanelObject.layer = 19;
@@ -211,9 +242,7 @@ namespace BetterContinents
             tex.ReadPixels(new Rect(0, 0, tex.width, tex.height), 0, 0);
             tex.Apply();
             RenderTexture.active = null;
-
-            var filename = DateTime.Now.ToString("yyyy-dd-M-HH-mm-ss") + ".png";
-            var path = Path.Combine(GetScreenShotDir(), filename);
+            
             Directory.CreateDirectory(Path.GetDirectoryName(path));
             Console.instance.Print($"Screenshot of minimap saved to {path}");
             
@@ -227,6 +256,11 @@ namespace BetterContinents
             if (!wasLarge)
             {
                 Minimap.instance.SetMapMode(Minimap.MapMode.Small);
+            }
+
+            if (wasClouds)
+            {
+                EnableMinimapClouds();
             }
         }
 

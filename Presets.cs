@@ -155,6 +155,7 @@ namespace BetterContinents
         public static void Save(BetterContinents.BetterContinentsSettings settings, string name)
         {
             settings.Save(Path.Combine(PresetsDir, name + ".BetterContinents"));
+            GameUtils.SaveMinimap(Path.Combine(PresetsDir, name + ".png"), 256);
         }
     }
 }

@@ -17,6 +17,10 @@ namespace BetterContinents
             "StartTemple", "Eikthyrnir", "GDKing", "GoblinKing", "Bonemass", "Dragonqueen",
             "Vendor_BlackForest"
         };
+        
+        private delegate void AddCmdActionDelegate(string cmd, string desc, string args, Action<string> action, Func<object> getCurrentValue);
+        private delegate NoiseStackSettings.NoiseSettings GetSettingsFromArgsDelegate();
+
         static DebugUtils()
         {
             AddCommand("info", "print current settings to console", _ =>
@@ -41,7 +45,6 @@ namespace BetterContinents
             
                 GameUtils.EndTerrainChanges();
             });
-
             AddCommand("locs", "print all location spawn instance counts to the console", _ =>
             {
                 var locationInstances = GameUtils.GetLocationInstances();
@@ -66,10 +69,6 @@ namespace BetterContinents
             {
                 GameUtils.ShowOnMap(Bosses);
             });
-            // AddCommand("show", "pin all locations on the map", _ =>
-            // {
-            //     GameUtils.ShowOnMap();
-            // });
             AddCommand("show", "pin locations matching optional filter on the map", "(optional filter)", args =>
             {
                 GameUtils.ShowOnMap(args
@@ -77,10 +76,6 @@ namespace BetterContinents
                     .Select(f => f.Trim())
                     .ToArray());
             });
-            // AddCommand("hide", "remove all pins from the map",  _ =>
-            // {
-            //     GameUtils.HideOnMap();
-            // });
             AddCommand("hide", "remove pins matching optional filter from the map", "(optional filter)", args =>
             {
                 GameUtils.HideOnMap(args
@@ -131,54 +126,269 @@ namespace BetterContinents
                 Console.instance.Print($"<color=orange>All locations regenerated!</color>");
             });
             AddCommand("scr", "save the minimap to a png", "(optional resolution, default is 2048)", arg => {
-                GameUtils.SaveMinimap(string.IsNullOrEmpty(arg) ? 2048 : int.Parse(arg));
+                var filename = DateTime.Now.ToString("yyyy-dd-M-HH-mm-ss") + ".png";
+                var screenshotDir = Path.Combine(Utils.GetSaveDataPath(), "BetterContinents", WorldGenerator.instance.m_world.m_name);
+                var path = Path.Combine(screenshotDir, filename);
+                int size = string.IsNullOrEmpty(arg) ? 2048 : int.Parse(arg);
+                GameUtils.SaveMinimap(path, size);
+                Console.instance.Print($"Map screenshot saved to {path}, size {size} x {size}");
             });
-            AddCommand("savepreset", "save the minimap to a png", "(name)", arg =>
+            AddCommand("savepreset", "save current world settings as a preset, including a thumbnail", "(name)", arg =>
             {
                 Presets.Save(BetterContinents.Settings, arg);
             });
 
-            void AddHeightmapSubcommand(Command command, string cmd, string desc, string args, Action<string> action)
+            void AddHeightmapSubcommand(Command command, string cmd, string desc, string args, Action<string> action, Func<object> getCurrentValue = null)
             {
                 command.AddSubcommand(cmd, desc, args, args2 =>
                 {
                     GameUtils.BeginTerrainChanges();
                     action(args2);
+                    BetterContinents.WorldGeneratorPatch.ApplyNoiseSettings();
                     GameUtils.EndTerrainChanges();
-                });            
+                }, getCurrentValue: getCurrentValue);            
             }
 
             AddCommand("param", "set parameters directly", configCmd: command =>
             {
-                command.AddSubcommand("g", "global settings, get more info with 'bc param g help'", subcmdConfig: subcmd => { 
-                    AddHeightmapSubcommand(subcmd, "cs", "continent size", "(between 0 and 1)", args => BetterContinents.Settings.SetContinentSize(float.Parse(args)));            
-                    AddHeightmapSubcommand(subcmd, "ma", "mountains amount", "(between 0 and 1)", args => BetterContinents.Settings.SetMountainsAmount(float.Parse(args)));
-                    AddHeightmapSubcommand(subcmd, "sl", "sea level adjustment", "(between 0 and 1)", args => BetterContinents.Settings.SetSeaLevelAdjustment(float.Parse(args)));
-                    AddHeightmapSubcommand(subcmd, "oc", "ocean channels", "(0 to disable, 1 to enable)", args => BetterContinents.Settings.SetOceanChannelsEnabled(int.Parse(args) != 0));
-                    AddHeightmapSubcommand(subcmd, "r", "rivers", "(0 to disable, 1 to enable)", args => BetterContinents.Settings.SetRiversEnabled(int.Parse(args) != 0));
-                    AddHeightmapSubcommand(subcmd, "me", "map edge drop off", "(0 to disable, 1 to enable)", args => BetterContinents.Settings.SetMapEdgeDropoff(int.Parse(args) != 0));
-                    AddHeightmapSubcommand(subcmd, "mc", "mountains allowed at center", "(0 to disable, 1 to enable)", args => BetterContinents.Settings.SetMountainsAllowedAtCenter(int.Parse(args) != 0));
-                });
-                command.AddSubcommand("h", "heightmap settings, get more info with 'bc param h help'", subcmdConfig: subcmd =>
-                {
-                    AddHeightmapSubcommand(subcmd, "fn", "set heightmap filename", "(full path including filename, or nothing to disable)", args =>
-                    {
-                        if (string.IsNullOrEmpty(args))
-                        {
-                            BetterContinents.Settings.DisableHeightmap();
-                            Console.instance.Print($"<color=orange>Heightmap disabled!</color>");
-                        }
-                        else if (!File.Exists(BetterContinents.CleanPath(args)))
-                            Console.instance.Print($"<color=red>ERROR: {args} doesn't exist</color>");
-                        else
-                            BetterContinents.Settings.SetHeightmapPath(args);
+                command.AddSubcommand("g", "global settings, get more info with 'bc param g help'", 
+                    subcmdConfig: subcmd => { 
+                        AddHeightmapSubcommand(subcmd, "cs", "continent size", "(between 0 and 1)", 
+                            args => BetterContinents.Settings.ContinentSize = float.Parse(args),
+                            () => BetterContinents.Settings.ContinentSize);
+                        AddHeightmapSubcommand(subcmd, "ma", "mountains amount", "(between 0 and 1)", 
+                            args => BetterContinents.Settings.MountainsAmount = float.Parse(args),
+                            () => BetterContinents.Settings.MountainsAmount);
+                        AddHeightmapSubcommand(subcmd, "sl", "sea level adjustment", "(between 0 and 1)", 
+                            args => BetterContinents.Settings.SeaLevel = float.Parse(args),
+                            () => BetterContinents.Settings.SeaLevel);
+                        AddHeightmapSubcommand(subcmd, "oc", "ocean channels", "(0 to disable, 1 to enable)", 
+                            args => BetterContinents.Settings.OceanChannelsEnabled = int.Parse(args) != 0,
+                            () => BetterContinents.Settings.OceanChannelsEnabled);
+                        AddHeightmapSubcommand(subcmd, "r", "rivers", "(0 to disable, 1 to enable)", 
+                            args => BetterContinents.Settings.RiversEnabled = int.Parse(args) != 0,
+                            () => BetterContinents.Settings.RiversEnabled);
+                        AddHeightmapSubcommand(subcmd, "me", "map edge drop off", "(0 to disable, 1 to enable)", 
+                            args => BetterContinents.Settings.MapEdgeDropoff = int.Parse(args) != 0,
+                            () => BetterContinents.Settings.MapEdgeDropoff);
+                        AddHeightmapSubcommand(subcmd, "mc", "mountains allowed at center", "(0 to disable, 1 to enable)", 
+                            args => BetterContinents.Settings.MountainsAllowedAtCenter = int.Parse(args) != 0,
+                            () => BetterContinents.Settings.MountainsAllowedAtCenter);
                     });
-                    AddHeightmapSubcommand(subcmd, "ov", "heightmap override all", "(0 to disable, 1 to enable)", args => BetterContinents.Settings.SetHeightmapOverrideAll(int.Parse(args) != 0));
-                    AddHeightmapSubcommand(subcmd, "am", "heightmap amount", "(between 0 and 5)", args => BetterContinents.Settings.SetHeightmapAmount(float.Parse(args)));
-                    AddHeightmapSubcommand(subcmd, "bl", "heightmap blend", "(between 0 and 1)", args => BetterContinents.Settings.SetHeightmapBlend(float.Parse(args)));
-                    AddHeightmapSubcommand(subcmd, "ad", "heightmap add", "(between -1 and 1)", args => BetterContinents.Settings.SetHeightmapAdd(float.Parse(args)));
-                    AddHeightmapSubcommand(subcmd, "ma", "heightmap mask", "(between 0 and 1)", args => BetterContinents.Settings.SetHeightmapMask(float.Parse(args)));
+                command.AddSubcommand("h", "heightmap settings, get more info with 'bc param h help'", 
+                    subcmdConfig: subcmd =>
+                    {
+                        AddHeightmapSubcommand(subcmd, "fn", "set heightmap filename", 
+                            "(full path including filename, or nothing to disable)", 
+                            args =>
+                            {
+                                if (string.IsNullOrEmpty(args))
+                                {
+                                    BetterContinents.Settings.DisableHeightmap();
+                                    Console.instance.Print($"<color=orange>Heightmap disabled!</color>");
+                                }
+                                else if (!File.Exists(BetterContinents.CleanPath(args)))
+                                    Console.instance.Print($"<color=red>ERROR: {args} doesn't exist</color>");
+                                else
+                                    BetterContinents.Settings.SetHeightmapPath(args);
+                            });
+                        AddHeightmapSubcommand(subcmd, "ov", "heightmap override all", "(0 to disable, 1 to enable)",
+                            args => BetterContinents.Settings.HeightmapOverrideAll = int.Parse(args) != 0,
+                            () => BetterContinents.Settings.HeightmapOverrideAll);
+                        AddHeightmapSubcommand(subcmd, "am", "heightmap amount", "(between 0 and 5)", 
+                            args => BetterContinents.Settings.HeightmapAmount = float.Parse(args),
+                            () => BetterContinents.Settings.HeightmapAmount);
+                        AddHeightmapSubcommand(subcmd, "bl", "heightmap blend", "(between 0 and 1)", 
+                            args => BetterContinents.Settings.HeightmapBlend = float.Parse(args),
+                            () => BetterContinents.Settings.HeightmapBlend);
+                        AddHeightmapSubcommand(subcmd, "ad", "heightmap add", "(between -1 and 1)", 
+                            args => BetterContinents.Settings.HeightmapAdd = float.Parse(args),
+                            () => BetterContinents.Settings.HeightmapAdd);
+                        AddHeightmapSubcommand(subcmd, "ma", "heightmap mask", "(between 0 and 1)", 
+                            args => BetterContinents.Settings.HeightmapMask = float.Parse(args),
+                            () => BetterContinents.Settings.HeightmapMask);
+                    });
+
+                string EnumHelp<T>() => "(" + string.Join(", ", Enum.GetNames(typeof(T))) + ")";
+                T EnumParse<T>(string str) => (T)Enum.Parse(typeof(T), str, ignoreCase: true);
+                void AddNoiseCommands(AddCmdActionDelegate addCmdAction, GetSettingsFromArgsDelegate getSettings)
+                {
+                    // Basic
+                    addCmdAction("nt", "noise type", EnumHelp<FastNoiseLite.NoiseType>(), 
+                        args => getSettings().NoiseType = EnumParse<FastNoiseLite.NoiseType>(args),
+                        () => getSettings().NoiseType);
+                    addCmdAction("fq", "frequency", "(0.0001 to 0.001)", 
+                        args => getSettings().Frequency = float.Parse(args),
+                        () => getSettings().Frequency);
+                    // Fractal
+                    addCmdAction("ft", "fractal type", EnumHelp<FastNoiseLite.FractalType>(), 
+                        args => getSettings().FractalType = EnumParse<FastNoiseLite.FractalType>(args),
+                        () => getSettings().FractalType);
+                    addCmdAction("fo", "fractal octaves", "(1 to 10)", 
+                        args => getSettings().FractalOctaves = int.Parse(args),
+                        () => getSettings().FractalOctaves);
+                    addCmdAction("fl", "fractal lacunarity", "(0 to 10)", 
+                        args => getSettings().FractalLacunarity = float.Parse(args),
+                        () => getSettings().FractalLacunarity);
+                    addCmdAction("fg", "fractal gain", "(0 to 1)", 
+                        args => getSettings().FractalGain = float.Parse(args),
+                        () => getSettings().FractalGain);
+                    addCmdAction("ws", "weighted strength", "(-1 to 1)", 
+                        args => getSettings().FractalWeightedStrength = float.Parse(args),
+                        () => getSettings().FractalWeightedStrength);
+                    addCmdAction("ps", "ping-pong strength", "(0 to 10)", 
+                        args => getSettings().FractalPingPongStrength = float.Parse(args),
+                        () => getSettings().FractalPingPongStrength);
+                    // Cellular
+                    addCmdAction("cf", "cellular distance function", EnumHelp<FastNoiseLite.CellularDistanceFunction>(), 
+                        args => getSettings().CellularDistanceFunction = EnumParse<FastNoiseLite.CellularDistanceFunction>(args),
+                        () => getSettings().CellularDistanceFunction);
+                    addCmdAction("ct", "cellular return type", EnumHelp<FastNoiseLite.CellularReturnType>(), 
+                        args => getSettings().CellularReturnType = EnumParse<FastNoiseLite.CellularReturnType>(args),
+                        () => getSettings().CellularReturnType);
+                    addCmdAction("cj", "cellular jitter", "(0 to 2)", 
+                        args => getSettings().CellularJitter = float.Parse(args),
+                        () => getSettings().CellularJitter);
+                    // Warp
+                    addCmdAction("dt", "domain warp type", EnumHelp<FastNoiseLite.DomainWarpType>(), 
+                        args => getSettings().DomainWarpType = EnumParse<FastNoiseLite.DomainWarpType>(args),
+                        () => getSettings().DomainWarpType);
+                    addCmdAction("da", "domain warp amp", "(0 to 200)", 
+                        args => getSettings().DomainWarpAmp = float.Parse(args),
+                        () => getSettings().DomainWarpAmp);
+                    // Filters
+                    addCmdAction("in", "invert", "(0 or 1)", 
+                        args => getSettings().Invert = int.Parse(args) != 0,
+                        () => getSettings().Invert);
+                    addCmdAction("ss", "smooth step", "(0 - 1) (0 - 1) or off to disable", 
+                        args =>
+                        {
+                            var parts = args.Split(' ');
+                            var settings = getSettings();
+                            if (parts.Length == 1 && parts[0] == "off")
+                            {
+                                settings.SmoothStepStart = settings.SmoothStepEnd = null;
+                            }
+                            else if(parts.Length == 2)
+                            {
+                                settings.SmoothStepStart = int.Parse(parts[0]);
+                                settings.SmoothStepEnd = int.Parse(parts[1]);
+                            }
+                            else
+                            {
+                                throw new ArgumentException("smooth step expects either two float arguments, or 0 to disable");
+                            }
+                        },
+                        () =>
+                        {
+                            var settings = getSettings();
+                            return settings.SmoothStepStart == null || settings.SmoothStepEnd == null
+                                ? "(disabled)"
+                                : $"[{settings.SmoothStepStart}, {settings.SmoothStepEnd}]";
+                        });
+                    addCmdAction("th", "threshold", "(0 to 1) or off to disable", 
+                        args => getSettings().Threshold = args == "off" ? (float?) null : float.Parse(args),
+                        () => (object)getSettings().Threshold ?? "(disabled)");
+                    addCmdAction("ra", "range", "(0 - 1) (0 - 1) or off to disable", 
+                        args =>
+                        {
+                            var parts = args.Split(' ');
+                            var settings = getSettings();
+                            if (parts.Length == 1 && parts[0] == "off")
+                            {
+                                settings.RangeStart = settings.RangeEnd = null;
+                            }
+                            else if(parts.Length == 2)
+                            {
+                                settings.RangeStart = int.Parse(parts[0]);
+                                settings.RangeEnd = int.Parse(parts[1]);
+                            }
+                            else
+                            {
+                                throw new ArgumentException("range expects either two float arguments, or 0 to disable");
+                            }
+                        },
+                        () =>
+                        {
+                            var settings = getSettings();
+                            return settings.RangeStart == null || settings.RangeEnd == null
+                                ? "(disabled)"
+                                : $"[{settings.RangeStart}, {settings.RangeEnd}]";
+                        });
+                    addCmdAction("th", "opacity", "(0 to 1) or off to disable", 
+                        args => getSettings().Opacity = args == "off" ? (float?) null : float.Parse(args),
+                        () => (object)getSettings().Opacity ?? "(disabled)");
+                }
+                
+                command.AddSubcommand("hb", "base height noise settings, get more info with 'bc param hb help'", subcmdConfig: subcmd =>
+                {
+                    AddNoiseCommands((cmd, desc, args, action, getCurrentValue) => AddHeightmapSubcommand(subcmd, cmd, desc, args, action, getCurrentValue),
+                        () => BetterContinents.Settings.BaseHeightNoise.BaseLayer);
                 });
+                
+                command.AddSubcommand("hl", "height layer noise settings", subcmdConfig: subcmd =>
+                {
+                    AddHeightmapSubcommand(subcmd, "num", "layer count", "(count from 0 to 4)", args => BetterContinents.Settings.BaseHeightNoise.SetNoiseLayerCount(int.Parse(args)));
+                    for (int i = 0; i < 4; i++)
+                    {
+                        int index = i;
+                        subcmd.AddSubcommand(index.ToString(), $"height layer {index}", subcmdConfig: subcmdLayer =>
+                        {
+                            subcmdLayer.AddSubcommand("n", $"height layer {index} noise", 
+                                subcmdConfig: subcmdLayerPart => AddNoiseCommands(
+                                    (cmd, desc, args, action, getCurrentValue) => AddHeightmapSubcommand(subcmdLayerPart, cmd, desc, args, action, getCurrentValue),
+                                    () => BetterContinents.Settings.BaseHeightNoise.Layers[index].noiseSettings));
+                            subcmdLayer.AddSubcommand("nw", $"height layer {index} noise domain wrap", 
+                                subcmdConfig: subcmdLayerPart => AddNoiseCommands(
+                                    (cmd, desc, args, action, getCurrentValue) => AddHeightmapSubcommand(subcmdLayerPart, cmd, desc, args, action, getCurrentValue),
+                                    () => BetterContinents.Settings.BaseHeightNoise.Layers[index].noiseWarpSettings));
+                            subcmdLayer.AddSubcommand("m", $"height layer {index} mask", 
+                                subcmdConfig: subcmdLayerPart => AddNoiseCommands(
+                                    (cmd, desc, args, action, getCurrentValue) => AddHeightmapSubcommand(subcmdLayerPart, cmd, desc, args, action, getCurrentValue),
+                                    () => BetterContinents.Settings.BaseHeightNoise.Layers[index].maskSettings));
+                            subcmdLayer.AddSubcommand("mw", $"height layer {index} mask domain warp", 
+                                subcmdConfig: subcmdLayerPart => AddNoiseCommands(
+                                    (cmd, desc, args, action, getCurrentValue) => AddHeightmapSubcommand(subcmdLayerPart, cmd, desc, args, action, getCurrentValue),
+                                    () => BetterContinents.Settings.BaseHeightNoise.Layers[index].maskWarpSettings));
+                        });
+                    }
+                    // AddNoiseCommands((cmd, desc, args, action) => AddHeightmapSubcommand(subcmd, cmd, desc, "(n, nw, m, or mw) (layer index 0 - 4) " + args, action),
+                    //     (ref string args) =>
+                    //     {
+                    //         var parts = args.Split(' ');
+                    //         int index = int.Parse(parts[0]);
+                    //         string part = parts[1];
+                    //         args = parts.Length >= 3 ? parts[2] : string.Empty;
+                    //         
+                    //         if (index >= BetterContinents.Settings.BaseHeightNoise.Layers.Count)
+                    //         {
+                    //             throw new IndexOutOfRangeException("Layer index out of range, set layer count first");
+                    //         }
+                    //
+                    //         NoiseStackSettings.NoiseSettings settings = null;
+                    //         switch (part)
+                    //         {
+                    //             case "n": settings = BetterContinents.Settings.BaseHeightNoise.Layers[index].noiseSettings; break; 
+                    //             case "nw": settings = BetterContinents.Settings.BaseHeightNoise.Layers[index].noiseWarpSettings; break;
+                    //             case "m": settings = BetterContinents.Settings.BaseHeightNoise.Layers[index].maskSettings; break;
+                    //             case "mw": settings = BetterContinents.Settings.BaseHeightNoise.Layers[index].maskWarpSettings; break;
+                    //         }
+                    //         
+                    //         if (settings == null)
+                    //         {
+                    //             throw new ArgumentException($"height layer part id unknown: {part}");
+                    //         }
+                    //
+                    //         if(string.IsNullOrEmpty(args.Trim()))
+                    //         {
+                    //             settings.Dump(Console.instance.Print);
+                    //         }
+                    //
+                    //
+                    //         return settings;
+                    //     });
+                });
+                
                 command.AddSubcommand("r", "roughmap settings, get more info with 'bc param r help'", subcmdConfig: subcmd =>
                 {
                     AddHeightmapSubcommand(subcmd, "fn", "set roughmap filename", "(full path including filename, or nothing to disable)", args =>
@@ -193,7 +403,10 @@ namespace BetterContinents
                         else
                             BetterContinents.Settings.SetRoughmapPath(args);
                     });
-                    AddHeightmapSubcommand(subcmd, "bl", "roughmap blend", "(between 0 and 1)", args => BetterContinents.Settings.SetRoughmapBlend(float.Parse(args)));
+                    AddHeightmapSubcommand(subcmd, "bl", "roughmap blend", "(between 0 and 1)", args =>
+                    {
+                        BetterContinents.Settings.RoughmapBlend = float.Parse(args);
+                    });
                 });
                 command.AddSubcommand("f", "flatmap settings, get more info with 'bc param f help'", subcmdConfig: subcmd =>
                 {
@@ -217,8 +430,14 @@ namespace BetterContinents
                         }
                     });
 
-                    AddHeightmapSubcommand(subcmd, "u", "use roughmap inverted for flat", "(0 to disable, 1 to enable)", args => BetterContinents.Settings.SetUseRoughInvertedForFlat(int.Parse(args) != 0));
-                    AddHeightmapSubcommand(subcmd, "bl", "flatmap blend", "(between 0 and 1)", args => BetterContinents.Settings.SetFlatmapBlend(float.Parse(args)));
+                    AddHeightmapSubcommand(subcmd, "u", "use roughmap inverted for flat", "(0 to disable, 1 to enable)", args =>
+                    {
+                        BetterContinents.Settings.UseRoughInvertedAsFlat = int.Parse(args) != 0;
+                    });
+                    AddHeightmapSubcommand(subcmd, "bl", "flatmap blend", "(between 0 and 1)", args =>
+                    {
+                        BetterContinents.Settings.FlatmapBlend = float.Parse(args);
+                    });
                 });
                 command.AddSubcommand("b", "biomemap settings, get more info with 'bc param b help'", subcmdConfig: subcmd =>
                 {
@@ -256,11 +475,11 @@ namespace BetterContinents
                 });
                 command.AddSubcommand("fo", "forest settings, get more info with 'bc param fo help'", subcmdConfig: subcmd =>
                 {
-                    AddHeightmapSubcommand(subcmd, "sc", "forest scale", "(between 0 and 1)", args => BetterContinents.Settings.SetForestScale(float.Parse(args)));
-                    AddHeightmapSubcommand(subcmd, "am", "forest amount", "(between 0 and 1)", args => BetterContinents.Settings.SetForestAmount(float.Parse(args)));
+                    AddHeightmapSubcommand(subcmd, "sc", "forest scale", "(between 0 and 1)", args => BetterContinents.Settings.ForestScaleFactor = float.Parse(args));
+                    AddHeightmapSubcommand(subcmd, "am", "forest amount", "(between 0 and 1)", args => BetterContinents.Settings.ForestAmount = float.Parse(args));
                     AddHeightmapSubcommand(subcmd, "ffo", "forest factor override all trees", "(0 to disable, 1 to enable)", args =>
                     {
-                        BetterContinents.Settings.SetForestFactorOverrideAllTrees(int.Parse(args) != 0);
+                        BetterContinents.Settings.ForestFactorOverrideAllTrees = int.Parse(args) != 0;
                         Console.instance.Print("<color=orange>NOTE: You need to reload the world to apply this change to the forest factor override!</color>");
                     });
                     AddHeightmapSubcommand(subcmd, "fn", "set forestmap filename", "(full path including filename, or nothing to disable)", args =>
@@ -275,31 +494,40 @@ namespace BetterContinents
                         else
                             BetterContinents.Settings.SetForestmapPath(args);
                     });
-                    AddHeightmapSubcommand(subcmd, "mu", "forestmap multiply", "(between 0 and 1)", args => BetterContinents.Settings.SetForestmapMultiply(float.Parse(args)));
-                    AddHeightmapSubcommand(subcmd, "ad", "forestmap add", "(between 0 and 1)", args => BetterContinents.Settings.SetForestmapAdd(float.Parse(args)));
+                    AddHeightmapSubcommand(subcmd, "mu", "forestmap multiply", "(between 0 and 1)", args =>
+                    {
+                        BetterContinents.Settings.ForestmapMultiply = float.Parse(args);
+                    });
+                    AddHeightmapSubcommand(subcmd, "ad", "forestmap add", "(between 0 and 1)", args =>
+                    {
+                        BetterContinents.Settings.ForestmapAdd = float.Parse(args);
+                    });
                 });
                 command.AddSubcommand("ri", "ridge settings, get more info with 'bc param ri help'", subcmdConfig: subcmd =>
                 {
-                    AddHeightmapSubcommand(subcmd, "mh", "ridges max height", "(between 0 and 1)", args => BetterContinents.Settings.SetMaxRidgeHeight(float.Parse(args)));
-                    AddHeightmapSubcommand(subcmd, "si", "ridge size", "(between 0 and 1)", args => BetterContinents.Settings.SetRidgeSize(float.Parse(args)));
-                    AddHeightmapSubcommand(subcmd, "bl", "ridge blend", "(between 0 and 1)", args => BetterContinents.Settings.SetRidgeBlend(float.Parse(args)));
-                    AddHeightmapSubcommand(subcmd, "am", "ridge amount", "(between 0 and 1)", args => BetterContinents.Settings.SetRidgeAmount(float.Parse(args)));
+                    AddHeightmapSubcommand(subcmd, "mh", "ridges max height", "(between 0 and 1)", args =>
+                    {
+                        BetterContinents.Settings.MaxRidgeHeight = float.Parse(args);
+                    });
+                    AddHeightmapSubcommand(subcmd, "si", "ridge size", "(between 0 and 1)", args => BetterContinents.Settings.RidgeSize = float.Parse(args));
+                    AddHeightmapSubcommand(subcmd, "bl", "ridge blend", "(between 0 and 1)", args => BetterContinents.Settings.RidgeBlend = float.Parse(args));
+                    AddHeightmapSubcommand(subcmd, "am", "ridge amount", "(between 0 and 1)", args => BetterContinents.Settings.RidgeAmount = float.Parse(args));
                 });
                 command.AddSubcommand("st", "start position settings, get more info with 'bc param st help'", subcmdConfig: subcmd =>
                 {
                     subcmd.AddSubcommand("os", "override start position", "(0 to disable, 1 to enable)", args =>
                     {
-                        BetterContinents.Settings.SetOverrideStartPosition(int.Parse(args) != 0);
+                        BetterContinents.Settings.OverrideStartPosition = int.Parse(args) != 0;
                         Console.instance.Print($"<color=orange>INFO: Use 'bc regenloc' to update the location spawns in the world (including the start location)</color>");
                     });
                     subcmd.AddSubcommand("x", "start position x", "(between -10500 and 10500)", args =>
                     {
-                        BetterContinents.Settings.SetStartPositionX(float.Parse(args));
+                        BetterContinents.Settings.StartPositionX = float.Parse(args);
                         Console.instance.Print($"<color=orange>INFO: Use 'bc regenloc' to update the location spawns in the world (including the start location)</color>");
                     });
                     subcmd.AddSubcommand("y", "start position y", "(between -10500 and 10500)", args =>
                     {
-                        BetterContinents.Settings.SetStartPositionY(float.Parse(args));
+                        BetterContinents.Settings.StartPositionY = float.Parse(args);
                         Console.instance.Print($"<color=orange>INFO: Use 'bc regenloc' to update the location spawns in the world (including the start location)</color>");
                     });
                 });
@@ -311,16 +539,16 @@ namespace BetterContinents
             rootCommand.Run(text);
         }
 
-        private static Command rootCommand = new Command("bc", "", "", null);
+        private static Command rootCommand = new Command("bc", "", "", null, null);
 
-        public static void AddCommand(string cmd, string desc, Action<string> action = null, Action<Command> configCmd = null)
+        public static void AddCommand(string cmd, string desc, Action<string> action = null, Action<Command> configCmd = null, Func<object> getCurrentValue = null)
         {
-            rootCommand.AddSubcommand(cmd, desc, action, configCmd);
+            rootCommand.AddSubcommand(cmd, desc, action, configCmd, getCurrentValue);
         }
 
-        public static void AddCommand(string cmd, string desc, string args, Action<string> action, Action<Command> configCmd = null)
+        public static void AddCommand(string cmd, string desc, string args, Action<string> action, Action<Command> configCmd = null, Func<object> getCurrentValue = null)
         {
-            rootCommand.AddSubcommand(cmd, desc, args, action, configCmd);
+            rootCommand.AddSubcommand(cmd, desc, args, action, configCmd, getCurrentValue);
         }
 
         public class Command
@@ -329,22 +557,24 @@ namespace BetterContinents
             public string desc;
             public string args;
             public Action<string> action;
+            public Func<object> getCurrentValue;
             public List<Command> subcommands = new List<Command>();
             public Command parent;
 
-            public Command(string cmd, string desc, string args, Action<string> action)
+            public Command(string cmd, string desc, string args, Action<string> action, Func<object> getCurrentValue)
             {
                 this.cmd = cmd;
                 this.desc = desc;
                 this.args = args;
                 this.action = action;
+                this.getCurrentValue = getCurrentValue;
                 if (cmd != "help")
                 {
                     AddSubcommand("help", "get help with this command", _ => this.ShowSubcommandHelp());
                 }
             }
 
-            public Command(string cmd, string desc, Action<string> action) : this(cmd, desc, null, action) { }
+            public Command(string cmd, string desc, Action<string> action, Func<string> getCurrentValue) : this(cmd, desc, null, action, getCurrentValue) { }
 
             public bool Run(string text)
             {
@@ -379,13 +609,13 @@ namespace BetterContinents
             }
 
             public void AddSubcommand(string cmd, string desc, Action<string> action = null,
-                Action<Command> subcmdConfig = null) =>
-                AddSubcommand(cmd, desc, null, action, subcmdConfig);
+                Action<Command> subcmdConfig = null, Func<object> getCurrentValue = null) =>
+                AddSubcommand(cmd, desc, null, action, subcmdConfig, getCurrentValue);
 
             public void AddSubcommand(string cmd, string desc, string args, Action<string> action = null,
-                Action<Command> subcmdConfig = null)
+                Action<Command> subcmdConfig = null, Func<object> getCurrentValue = null)
             {
-                var newSubCmd = new Command(cmd, desc, args, action);
+                var newSubCmd = new Command(cmd, desc, args, action, getCurrentValue);
                 newSubCmd.parent = this;
                 subcmdConfig?.Invoke(newSubCmd);
                 subcommands.Add(newSubCmd);
@@ -402,9 +632,13 @@ namespace BetterContinents
                 }
 
                 var fullCmd = string.Join(" ", cmdStack);
-                Console.instance.Print(args != null
-                    ? $"    <size=18><b><color=cyan>{fullCmd}</color></b> <color=orange>{args}</color> -- </size><size=15>{desc}</size>"
-                    : $"    <size=18><b><color=cyan>{fullCmd}</color></b> -- </size><size=15>{desc}</size>");
+                    
+                Console.instance.Print($"    <size=18><b><color=cyan>{fullCmd}</color></b> <color=orange>{args ?? string.Empty}</color> -- <b><color=#55ff55ff>{getCurrentValue?.Invoke() ?? string.Empty}</color></b> -- </size><size=15>{desc}</size>");
+
+                // if (getCurrentValue != null)
+                // {
+                //     Console.instance.Print($"        <size=15><b><color=#55ff55ff>{getCurrentValue()}</color></b></size>");
+                // }
             }
 
             public void ShowSubcommandHelp()

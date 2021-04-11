@@ -90,8 +90,6 @@ namespace BetterContinents
         /// </summary>
         public const string MockPrefix = "BCMock_";
 
-        private static GameObject _parent;
-
         /// <summary>
         /// Will try to find the real vanilla prefab from the given mock
         /// </summary>

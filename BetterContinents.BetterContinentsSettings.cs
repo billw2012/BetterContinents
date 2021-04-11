@@ -11,7 +11,7 @@ namespace BetterContinents
         public struct BetterContinentsSettings
         {
             // Add new properties at the end, and comment where new versions start
-            public const int LatestVersion = 6;
+            public const int LatestVersion = 7;
             
             // Version 1
             public int Version;
@@ -67,6 +67,9 @@ namespace BetterContinents
             // Version 6
             public bool HeightmapOverrideAll;
             public float HeightmapMask;
+            
+            // Version 7
+            public NoiseStackSettings BaseHeightNoise;
 
             // Non-serialized
             private ImageMapFloat Heightmap;
@@ -154,23 +157,23 @@ namespace BetterContinents
 
                 if (EnabledForThisWorld)
                 {
-                    SetContinentSize(ConfigContinentSize.Value);
-                    SetMountainsAmount(ConfigMountainsAmount.Value);
-                    SetSeaLevelAdjustment(ConfigSeaLevelAdjustment.Value);
+                    ContinentSize = ConfigContinentSize.Value;
+                    MountainsAmount = ConfigMountainsAmount.Value;
+                    SeaLevel = ConfigSeaLevelAdjustment.Value;
 
-                    SetMaxRidgeHeight(ConfigMaxRidgeHeight.Value);
-                    SetRidgeSize(ConfigRidgeSize.Value);
-                    SetRidgeBlend(ConfigRidgeBlend.Value);
-                    SetRidgeAmount(ConfigRidgeAmount.Value);
+                    MaxRidgeHeight = ConfigMaxRidgeHeight.Value;
+                    RidgeSize = ConfigRidgeSize.Value;
+                    RidgeBlend = ConfigRidgeBlend.Value;
+                    RidgeAmount = ConfigRidgeAmount.Value;
 
                     var heightmapPath = HeightmapPath(ConfigHeightmapFile.Value, ConfigMapSourceDir.Value);
                     if (!string.IsNullOrEmpty(heightmapPath))
                     {
-                        SetHeightmapAmount(ConfigHeightmapAmount.Value);
-                        SetHeightmapBlend(ConfigHeightmapBlend.Value);
-                        SetHeightmapAdd(ConfigHeightmapAdd.Value);
-                        SetHeightmapMask(ConfigHeightmapMask.Value);
-                        SetHeightmapOverrideAll(ConfigHeightmapOverrideAll.Value);
+                        HeightmapAmount = ConfigHeightmapAmount.Value;
+                        HeightmapBlend = ConfigHeightmapBlend.Value;
+                        HeightmapAdd = ConfigHeightmapAdd.Value;
+                        HeightmapMask = ConfigHeightmapMask.Value;
+                        HeightmapOverrideAll = ConfigHeightmapOverrideAll.Value;
 
                         Heightmap = new ImageMapFloat(heightmapPath);
                         if (!Heightmap.LoadSourceImage() || !Heightmap.CreateMap())
@@ -179,6 +182,8 @@ namespace BetterContinents
                         }
                     }
 
+                    BaseHeightNoise = new NoiseStackSettings();
+                    
                     var biomemapPath = BiomemapPath(ConfigBiomemapFile.Value, ConfigMapSourceDir.Value);
                     if (!string.IsNullOrEmpty(biomemapPath))
                     {
@@ -189,16 +194,16 @@ namespace BetterContinents
                         }
                     }
 
-                    SetOceanChannelsEnabled(ConfigOceanChannelsEnabled.Value);
-                    SetRiversEnabled(ConfigRiversEnabled.Value);
+                    OceanChannelsEnabled = ConfigOceanChannelsEnabled.Value;
+                    RiversEnabled = ConfigRiversEnabled.Value;
 
-                    SetForestScale(ConfigForestScale.Value);
-                    SetForestAmount(ConfigForestAmount.Value);
-                    SetForestFactorOverrideAllTrees(ConfigForestFactorOverrideAllTrees.Value);
+                    ForestScaleFactor = ConfigForestScale.Value;
+                    ForestAmount = ConfigForestAmount.Value;
+                    ForestFactorOverrideAllTrees = ConfigForestFactorOverrideAllTrees.Value;
 
-                    SetOverrideStartPosition(ConfigOverrideStartPosition.Value);
-                    SetStartPositionX(ConfigStartPositionX.Value);
-                    SetStartPositionY(ConfigStartPositionY.Value);
+                    OverrideStartPosition = ConfigOverrideStartPosition.Value;
+                    StartPositionX = ConfigStartPositionX.Value;
+                    StartPositionY = ConfigStartPositionY.Value;
                     //LakesEnabled = ConfigLakesEnabled.Value;
                     
                     var spawnmapPath = SpawnmapPath(ConfigSpawnmapFile.Value, ConfigMapSourceDir.Value);
@@ -214,7 +219,7 @@ namespace BetterContinents
                     var roughmapPath = RoughmapPath(ConfigRoughmapFile.Value, ConfigMapSourceDir.Value);
                     if (!string.IsNullOrEmpty(roughmapPath))
                     {
-                        SetRoughmapBlend(ConfigRoughmapBlend.Value);
+                        RoughmapBlend = ConfigRoughmapBlend.Value;
                         
                         Roughmap = new ImageMapFloat(roughmapPath);
                         if (!Roughmap.LoadSourceImage() || !Roughmap.CreateMap())
@@ -227,8 +232,8 @@ namespace BetterContinents
                     if (ConfigUseRoughInvertedForFlat.Value && Roughmap != null ||
                         !ConfigUseRoughInvertedForFlat.Value && !string.IsNullOrEmpty(flatmapPath))
                     {
-                        SetUseRoughInvertedForFlat(ConfigUseRoughInvertedForFlat.Value);
-                        SetFlatmapBlend(ConfigFlatmapBlend.Value);
+                        UseRoughInvertedAsFlat = ConfigUseRoughInvertedForFlat.Value;
+                        FlatmapBlend = ConfigFlatmapBlend.Value;
                         if (!string.IsNullOrEmpty(flatmapPath) && !UseRoughInvertedAsFlat)
                         {
                             Flatmap = new ImageMapFloat(flatmapPath);
@@ -242,8 +247,8 @@ namespace BetterContinents
                     var forestmapPath = ForestmapPath(ConfigForestmapFile.Value, ConfigMapSourceDir.Value);
                     if (!string.IsNullOrEmpty(forestmapPath))
                     {
-                        SetForestmapAdd(ConfigForestmapAdd.Value);
-                        SetForestmapMultiply(ConfigForestmapMultiply.Value);
+                        ForestmapAdd = ConfigForestmapAdd.Value;
+                        ForestmapMultiply = ConfigForestmapMultiply.Value;
                         
                         Forestmap = new ImageMapFloat(forestmapPath);
                         if (!Forestmap.LoadSourceImage() || !Forestmap.CreateMap())
@@ -252,44 +257,68 @@ namespace BetterContinents
                         }
                     }
 
-                    SetMapEdgeDropoff(ConfigMapEdgeDropoff.Value);
-                    SetMountainsAllowedAtCenter(ConfigMountainsAllowedAtCenter.Value);
+                    MapEdgeDropoff = ConfigMapEdgeDropoff.Value;
+                    MountainsAllowedAtCenter = ConfigMountainsAllowedAtCenter.Value;
                 }
             }
 
-            public void SetContinentSize(float continentSize) => GlobalScale = FeatureScaleCurve(continentSize);
-            public void SetMountainsAmount(float mountainsAmount) => MountainsAmount = mountainsAmount;
-            public void SetSeaLevelAdjustment(float seaLevelAdjustment) => SeaLevelAdjustment = Mathf.Lerp(0.25f, -0.25f, seaLevelAdjustment);
-            public void SetOceanChannelsEnabled(bool oceanChannelsEnabled) => OceanChannelsEnabled = oceanChannelsEnabled;
-            public void SetRiversEnabled(bool riversEnabled) => RiversEnabled = riversEnabled;
-            public void SetMapEdgeDropoff(bool mapEdgeDropoff) => DisableMapEdgeDropoff = !mapEdgeDropoff;
-            public void SetMountainsAllowedAtCenter(bool mountainsAllowedAtCenter) => MountainsAllowedAtCenter = mountainsAllowedAtCenter;
-            
-            public void SetHeightmapAmount(float heightmapAmount) => HeightmapAmount = heightmapAmount;
-            public void SetHeightmapBlend(float heightmapBlend) => HeightmapBlend = heightmapBlend;
-            public void SetHeightmapAdd(float heightmapAdd) => HeightmapAdd = heightmapAdd;
-            public void SetHeightmapMask(float heightmapMask) => HeightmapMask = heightmapMask;
-            public void SetHeightmapOverrideAll(bool heightmapOverrideAll) => HeightmapOverrideAll = heightmapOverrideAll;
-            
-            public void SetRoughmapBlend(float roughmapBlend) => RoughmapBlend = roughmapBlend;
+            #region Setters
 
-            public void SetUseRoughInvertedForFlat(bool useRoughInvertedAsFlat) => UseRoughInvertedAsFlat = useRoughInvertedAsFlat;
-            public void SetFlatmapBlend(float flatmapBlend) => FlatmapBlend = flatmapBlend;
+            public float ContinentSize
+            {
+                set => GlobalScale = FeatureScaleCurve(value);
+                get => InvFeatureScaleCurve(GlobalScale);
+            }
 
-            public void SetForestScale(float forestScale) => ForestScale = FeatureScaleCurve(forestScale);
-            public void SetForestAmount(float forestAmount) => ForestAmountOffset = Mathf.Lerp(1, -1, forestAmount);
-            public void SetForestFactorOverrideAllTrees(bool forestFactorOverrideAllTrees) => ForestFactorOverrideAllTrees = forestFactorOverrideAllTrees;
-            public void SetForestmapMultiply(float forestmapMultiply) => ForestmapMultiply = forestmapMultiply;
-            public void SetForestmapAdd(float forestmapAdd) => ForestmapAdd = forestmapAdd;
-            
-            public void SetMaxRidgeHeight(float maxRidgeHeight) => MaxRidgeHeight = maxRidgeHeight;
-            public void SetRidgeSize(float ridgeSize) => RidgeScale = FeatureScaleCurve(ridgeSize);
-            public void SetRidgeBlend(float ridgeBlend) => RidgeBlendSigmoidB = Mathf.Lerp(-30f, -10f, ridgeBlend);
-            public void SetRidgeAmount(float ridgeAmount) => RidgeBlendSigmoidXOffset = Mathf.Lerp(1f, 0.35f, ridgeAmount);
+            public float SeaLevel
+            {
+                set => SeaLevelAdjustment = Mathf.Lerp(0.25f, -0.25f, value);
+                get => Mathf.InverseLerp(0.25f, -0.25f, SeaLevelAdjustment);
+            }
 
-            public void SetOverrideStartPosition(bool overrideStartPosition) => OverrideStartPosition = overrideStartPosition;
-            public void SetStartPositionX(float startPositionX) => StartPositionX = startPositionX;
-            public void SetStartPositionY(float startPositionY) => StartPositionY = startPositionY;
+            public bool MapEdgeDropoff
+            {
+                set => DisableMapEdgeDropoff = !value;
+                get => !DisableMapEdgeDropoff;
+            }
+
+            // public void SetBaseHeightNoiseType(FastNoiseLite.NoiseType baseHeightNoiseType) => BaseHeightNoiseType = baseHeightNoiseType;
+            // public void SetBaseHeightFrequency(float baseHeightFrequency) => BaseHeightFrequency = baseHeightFrequency;
+            // public void SetBaseHeightFractalType(FastNoiseLite.FractalType baseHeightFractalType) => BaseHeightFractalType = baseHeightFractalType;
+            // public void SetBaseHeightFractalOctaves(int baseHeightFractalOctaves) => BaseHeightFractalOctaves = baseHeightFractalOctaves;
+            // public void SetBaseHeightLacunarity(float baseHeightLacunarity) => BaseHeightLacunarity = baseHeightLacunarity;
+            // public void SetBaseHeightFractalGain(float baseHeightFractalGain) => BaseHeightFractalGain = baseHeightFractalGain;
+            // public void SetBaseHeightWeightedStrength(float baseHeightWeightedStrength) => BaseHeightWeightedStrength = baseHeightWeightedStrength;
+
+            public float ForestScaleFactor
+            {
+                set => ForestScale = FeatureScaleCurve(value);
+                get => InvFeatureScaleCurve(ForestScale);
+            }
+
+            public float ForestAmount
+            {
+                set => ForestAmountOffset = Mathf.Lerp(1, -1, value);
+                get => Mathf.InverseLerp(1, -1, ForestAmountOffset);
+            }
+
+            public float RidgeSize
+            {
+                set => RidgeScale = FeatureScaleCurve(value);
+                get => InvFeatureScaleCurve(RidgeScale);
+            }
+
+            public float RidgeBlend
+            {
+                set => RidgeBlendSigmoidB = Mathf.Lerp(-30f, -10f, value);
+                get => Mathf.InverseLerp(-30f, -10f, RidgeBlendSigmoidB);
+            }
+
+            public float RidgeAmount
+            {
+                set => RidgeBlendSigmoidXOffset = Mathf.Lerp(1f, 0.35f, value);
+                get => Mathf.InverseLerp(1f, 0.35f, RidgeBlendSigmoidXOffset);
+            }
 
             public void SetHeightmapPath(string path, string projectDir = null)
             {
@@ -398,11 +427,17 @@ namespace BetterContinents
                 }
             }
             public void DisableForestmap() => Forestmap = null;
-
+            #endregion
+            
             private static float FeatureScaleCurve(float x) => ScaleRange(Gamma(x, 0.726965071031f), 0.2f, 3f);
+            private static float InvFeatureScaleCurve(float y) => InvGamma(InvScaleRange(y, 0.2f, 3f), 0.726965071031f);
 
             private static float Gamma(float x, float h) => Mathf.Pow(x, Mathf.Pow(1 - h * 0.5f + 0.25f, 6f));
-            private static float ScaleRange(float g, float n, float m) => n + (m - n) * (1 - g); 
+            private static float InvGamma(float g, float h) => Mathf.Pow(g, 1 / Mathf.Pow(1 - h * 0.5f + 0.25f, 6f));
+            
+            private static float ScaleRange(float x, float a, float b) => a + (b - a) * (1 - x); 
+            private static float InvScaleRange(float y, float a, float b) => 1f - (y - a) / (b - a);
+            
 
             public void Dump(Action<string> output = null)
             {
@@ -412,14 +447,14 @@ namespace BetterContinents
                 
                 if (EnabledForThisWorld)
                 {
-                    output($"GlobalScale {GlobalScale}");
-                    output($"MountainsAmount {MountainsAmount}");
-                    output($"SeaLevelAdjustment {SeaLevelAdjustment}");
-                    output($"OceanChannelsEnabled {OceanChannelsEnabled}");
-                    output($"RiversEnabled {RiversEnabled}");
+                    output($"Continent size {ContinentSize}");
+                    output($"Mountains amount {MountainsAmount}");
+                    output($"Sea level adjustment {SeaLevel}");
+                    output($"Ocean channels enabled {OceanChannelsEnabled}");
+                    output($"Rivers enabled {RiversEnabled}");
                     
-                    output($"DisableMapEdgeDropoff {DisableMapEdgeDropoff}");
-                    output($"MountainsAllowedAtCenter {MountainsAllowedAtCenter}");
+                    output($"Map edge dropoff {MapEdgeDropoff}");
+                    output($"Mountains allowed at center {MountainsAllowedAtCenter}");
                     
                     if (Heightmap != null)
                     {
@@ -434,6 +469,9 @@ namespace BetterContinents
                     {
                         output($"Heightmap disabled");
                     }
+                    
+                    output($"Base height noise stack:");
+                    BaseHeightNoise.Dump(str => output($"    {str}"));
 
                     if (Biomemap != null)
                     {
@@ -482,8 +520,8 @@ namespace BetterContinents
                         }
                     }
                     
-                    output($"ForestScale {ForestScale}");
-                    output($"ForestAmountOffset {ForestAmountOffset}");
+                    output($"Forest scale {ForestScaleFactor}");
+                    output($"Forest amount {ForestAmount}");
                     if (Forestmap != null)
                     {
                         output($"Forestmap file {Forestmap.FilePath}");
@@ -502,10 +540,10 @@ namespace BetterContinents
                         output($"Forestmap disabled");
                     }
                     
-                    output($"MaxRidgeHeight {MaxRidgeHeight}");
-                    output($"RidgeScale {RidgeScale}");
-                    output($"RidgeBlendSigmoidB {RidgeBlendSigmoidB}");
-                    output($"RidgeBlendSigmoidXOffset {RidgeBlendSigmoidXOffset}");
+                    output($"Max ridge height {MaxRidgeHeight}");
+                    output($"Ridge size {RidgeSize}");
+                    output($"Ridge blend {RidgeBlend}");
+                    output($"Ridge amount {RidgeAmount}");
 
                     if (OverrideStartPosition)
                     {
@@ -628,6 +666,12 @@ namespace BetterContinents
                     {
                         pkg.Write(HeightmapOverrideAll);
                         pkg.Write(HeightmapMask);
+                    }
+                    
+                    // Version 7
+                    if (Version >= 7)
+                    {
+                        BaseHeightNoise.Serialize(pkg);
                     }
                 }
             }
@@ -804,6 +848,12 @@ namespace BetterContinents
                     {
                         HeightmapOverrideAll = false;
                         HeightmapMask = 0;
+                    }
+                    
+                    // Version 7
+                    if (Version >= 7)
+                    {
+                        BaseHeightNoise = NoiseStackSettings.Deserialize(pkg);
                     }
                 }
             }
