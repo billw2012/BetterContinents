@@ -71,6 +71,10 @@ namespace BetterContinents
         
         public static ConfigEntry<bool> ConfigDebugModeEnabled;
         public static ConfigEntry<bool> ConfigDebugSkipDefaultLocationPlacement;
+        
+        public static ConfigEntry<bool> ConfigExperimentalMultithreadedHeightmapBuild;
+        public static ConfigEntry<bool> ConfigExperimentalParallelChunksBuild;
+        
 
         public const float WorldSize = 10500f;
         private static readonly Vector2 Half = Vector2.one * 0.5f;
@@ -263,6 +267,12 @@ namespace BetterContinents
                         .Description("Automatically reveals the full map on respawn, enables cheat mode, and debug mode, for debugging purposes").Bind(out ConfigDebugModeEnabled);
                     groupBuilder.AddValue("Skip Default Location Placement")
                         .Description("Skips default location placement during world gen (spawn temple and spawnmap are still placed), for quickly testing the heightmap itself").Bind(out ConfigDebugSkipDefaultLocationPlacement);
+                })
+                .AddGroup("BetterContinents.Experimental", groupBuilder => {
+                    groupBuilder.AddValue("Multithreaded Heightmap Build")
+                        .Advanced().Description("").Bind(out ConfigExperimentalMultithreadedHeightmapBuild);
+                    groupBuilder.AddValue("Parallel Chunks Build")
+                        .Advanced().Description("").Bind(out ConfigExperimentalParallelChunksBuild);
                 })
                 .AddGroup("BetterContinents.Misc", groupBuilder => {
                     groupBuilder.AddValue("NexusID")

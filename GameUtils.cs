@@ -79,13 +79,11 @@ namespace BetterContinents
         private static int MinimapOrigTextureSize = 0;
         private static float MinimapOrigPixelSize = 0;
 
-        public static void SetMinimapDownscalingPower(int pwr)
-            => MinimapDownscaling = (int) Mathf.Pow(2, Mathf.Clamp(pwr, 0, 3));
-
-        private static int MinimapDownscaling = 4;
+        public static int MinimapDownscalingPower = 2;
 
         public static void FastMinimapRegen()
         {
+            int MinimapDownscaling = (int) Mathf.Pow(2, Mathf.Clamp(MinimapDownscalingPower, 0, 3));
             if (MinimapOrigTextureSize == 0 
                 || Minimap.instance.m_textureSize != MinimapOrigTextureSize / MinimapDownscaling)
             {
@@ -577,11 +575,11 @@ namespace BetterContinents
         public static void SimpleParallelFor(int taskCount, int from, int to, Action<int> action)
         {
             var tasks = new Task[taskCount];
-            int perTaskCount = (to - @from) / taskCount;
-            for (int i = 0, f = @from; i < taskCount; i++, f += perTaskCount)
+            int perTaskCount = (to - from) / taskCount;
+            for (int i = 0, f = from; i < taskCount - 1; i++, f += perTaskCount)
             {
                 int taskFrom = f;
-                int taskTo = Mathf.Min(to, f + perTaskCount);
+                int taskTo = f + perTaskCount;
                 tasks[i] = Task.Run(() =>
                 {
                     for (int j = taskFrom; j < taskTo; j++)
@@ -590,6 +588,14 @@ namespace BetterContinents
                     }
                 });
             }
+            // Make sure last task definitely captures all the values
+            tasks[taskCount - 1] = Task.Run(() =>
+            {
+                for (int j = from + (taskCount - 1) * perTaskCount; j < to; j++)
+                {
+                    action(j);
+                }
+            });
             Task.WaitAll(tasks);
         }
     }

@@ -2,12 +2,15 @@
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Xml.Schema;
+using BepInEx.Configuration;
 using HarmonyLib;
+using JetBrains.Annotations;
 using UnityEngine;
 
 namespace BetterContinents
 {
-    public class DebugUtils
+    public partial class DebugUtils
     {
         private static Texture CloudTexture;
         private static Texture TransparentTexture;
@@ -18,640 +21,709 @@ namespace BetterContinents
             "Vendor_BlackForest"
         };
         
-        private delegate void AddCmdActionDelegate(string cmd, string desc, string args, Action<string> action, Func<object> getCurrentValue);
-        private delegate NoiseStackSettings.NoiseSettings GetSettingsFromArgsDelegate();
+        //private delegate void AddCmdActionDelegate(Type type, string name, string desc, object defaultValue, AcceptableValueBase range, Action<object> setValue, Func<object> getValue);
+        //private delegate NoiseStackSettings.NoiseSettings GetSettingsFromArgsDelegate();
 
         static DebugUtils()
         {
-            AddCommand("info", "print current settings to console", _ =>
+            rootCommand = new Command("bc",  "Better Continents", "Better Continents command").Subcommands(bc =>
             {
-                BetterContinents.Settings.Dump(str => Console.instance.Print($"<size=15><color=silver>{str}</color></size>"));
-                Console.instance.Print($"<color=orange>NOTE: these settings don't map exactly to console param function or the config file, as some of them are derived.</color>");
-            });
+                bc.AddCommand("info", "Dump Info", "print current settings to console", _ => {
+                    BetterContinents.Settings.Dump(str => Console.instance.Print($"<size=15><color=silver>{str}</color></size>"));
+                    Console.instance.Print($"<color=orange>NOTE: these settings don't map exactly to console param function or the config file, as some of them are derived.</color>");
+                });
 
-            AddCommand("reload", "reload and reapply one or more of the image maps (e.g. 'bc reload hm rm' to reload height map and roughmap)", "hm/rm/fm/bm/sm/fom/all", args =>
-            {
-                string[] maps = args.Split(new[] {' '}, StringSplitOptions.RemoveEmptyEntries);
-                bool all = maps.Contains("all");
-
-                GameUtils.BeginTerrainChanges();
-
-                if (maps.Contains("hm") || all)     BetterContinents.Settings.ReloadHeightmap();
-                if (maps.Contains("rm") || all)     BetterContinents.Settings.ReloadRoughmap();
-                if (maps.Contains("fm") || all)     BetterContinents.Settings.ReloadFlatmap();
-                if (maps.Contains("bm") || all)     BetterContinents.Settings.ReloadBiomemap();
-                if (maps.Contains("sm") || all)     BetterContinents.Settings.ReloadSpawnmap();
-                if (maps.Contains("fom") || all)    BetterContinents.Settings.ReloadForestmap();
-            
-                GameUtils.EndTerrainChanges();
-            });
-            AddCommand("locs", "print all location spawn instance counts to the console", _ =>
-            {
-                var locationInstances = GameUtils.GetLocationInstances();
-
-                var locationTypes = locationInstances.Values
-                    .GroupBy(l => l.m_location.m_prefabName)
-                    .ToDictionary(g => g.Key, g => g.ToList());
-                foreach (var lg in locationTypes)
+                if (BetterContinents.Settings.AnyImageMap)
                 {
-                    Console.instance.Print($"Placed {lg.Value.Count} {lg.Key} locations");
-                }
-
-                foreach (var boss in Bosses)
-                {
-                    if (!locationTypes.ContainsKey(boss))
+                    bc.AddGroup("reload", "Reload", "reload and reapply one or more of the image maps", reload =>
                     {
-                        Console.instance.Print($"<color=orange>WARNING: No {boss} generated</color>");
-                    }
-                }
-            });
-            AddCommand("bosses", "show pins for bosses, start temple and trader", _ =>
-            {
-                GameUtils.ShowOnMap(Bosses);
-            });
-            AddCommand("show", "pin locations matching optional filter on the map", "(optional filter)", args =>
-            {
-                GameUtils.ShowOnMap(args
-                    .Split(new[] {' '}, StringSplitOptions.RemoveEmptyEntries)
-                    .Select(f => f.Trim())
-                    .ToArray());
-            });
-            AddCommand("hide", "remove pins matching optional filter from the map", "(optional filter)", args =>
-            {
-                GameUtils.HideOnMap(args
-                    .Split(new[] {' '}, StringSplitOptions.RemoveEmptyEntries)
-                    .Select(f => f.Trim())
-                    .ToArray());
-            });
-            AddCommand("clouds", "toggle the map clouds", _ =>
-            {
-                var mat = Minimap.instance.m_mapImageLarge.material;
-                if (mat.GetTexture("_CloudTex") == TransparentTexture)
-                {
-                    mat.SetTexture("_CloudTex", CloudTexture);
-                }
-                else
-                {
-                    CloudTexture = mat.GetTexture("_CloudTex");
-                    if (TransparentTexture == null)
-                    {
-                        TransparentTexture = UI.CreateFillTexture(new Color32(0, 0, 0, 0));
-                    }
-
-                    mat.SetTexture("_CloudTex", TransparentTexture);
-                }
-            });
-            AddCommand("mapds", "set minimap downscaling factor (for faster updates)", "(0 = vanilla quality, 1 = 1/2 res, 2 = 1/4 res, 3 = 1/8 res, 2 is default)", args =>
-            {
-                GameUtils.SetMinimapDownscalingPower(int.Parse(args));
-                GameUtils.FastMinimapRegen();
-            });
-
-            AddCommand("refresh", "resets all vegetation and locations (done automatically on every change)", _ => {
-                GameUtils.Refresh();
-            });
-            AddCommand("despawnall", "despawn everything", _ => {
-                GameUtils.DespawnAll();
-            });
-            AddCommand("resetall", "reset everything (WARNING: this deletes everything that has been build in the map!)", _ => {
-                GameUtils.ResetAll();
-                Console.instance.Print($"<color=orange>All constructions removed!</color>");
-            });
-            AddCommand("regenloc", "regenerate all locations", _ =>
-            {
-                bool prevLocSetting = BetterContinents.ConfigDebugSkipDefaultLocationPlacement.Value;
-                BetterContinents.ConfigDebugSkipDefaultLocationPlacement.Value = false;
-                GameUtils.RegenerateLocations();
-                BetterContinents.ConfigDebugSkipDefaultLocationPlacement.Value = prevLocSetting;
-                Console.instance.Print($"<color=orange>All locations regenerated!</color>");
-            });
-            AddCommand("scr", "save the minimap to a png", "(optional resolution, default is 2048)", arg => {
-                var filename = DateTime.Now.ToString("yyyy-dd-M-HH-mm-ss") + ".png";
-                var screenshotDir = Path.Combine(Utils.GetSaveDataPath(), "BetterContinents", WorldGenerator.instance.m_world.m_name);
-                var path = Path.Combine(screenshotDir, filename);
-                int size = string.IsNullOrEmpty(arg) ? 2048 : int.Parse(arg);
-                GameUtils.SaveMinimap(path, size);
-                Console.instance.Print($"Map screenshot saved to {path}, size {size} x {size}");
-            });
-            AddCommand("savepreset", "save current world settings as a preset, including a thumbnail", "(name)", arg =>
-            {
-                Presets.Save(BetterContinents.Settings, arg);
-            });
-
-            void AddHeightmapSubcommand(Command command, string cmd, string desc, string args, Action<string> action, Func<object> getCurrentValue = null)
-            {
-                command.AddSubcommand(cmd, desc, args, args2 =>
-                {
-                    GameUtils.BeginTerrainChanges();
-                    action(args2);
-                    BetterContinents.WorldGeneratorPatch.ApplyNoiseSettings();
-                    GameUtils.EndTerrainChanges();
-                }, getCurrentValue: getCurrentValue);            
-            }
-
-            AddCommand("param", "set parameters directly", configCmd: command =>
-            {
-                command.AddSubcommand("g", "global settings, get more info with 'bc param g help'", 
-                    subcmdConfig: subcmd => { 
-                        AddHeightmapSubcommand(subcmd, "cs", "continent size", "(between 0 and 1)", 
-                            args => BetterContinents.Settings.ContinentSize = float.Parse(args),
-                            () => BetterContinents.Settings.ContinentSize);
-                        AddHeightmapSubcommand(subcmd, "ma", "mountains amount", "(between 0 and 1)", 
-                            args => BetterContinents.Settings.MountainsAmount = float.Parse(args),
-                            () => BetterContinents.Settings.MountainsAmount);
-                        AddHeightmapSubcommand(subcmd, "sl", "sea level adjustment", "(between 0 and 1)", 
-                            args => BetterContinents.Settings.SeaLevel = float.Parse(args),
-                            () => BetterContinents.Settings.SeaLevel);
-                        AddHeightmapSubcommand(subcmd, "oc", "ocean channels", "(0 to disable, 1 to enable)", 
-                            args => BetterContinents.Settings.OceanChannelsEnabled = int.Parse(args) != 0,
-                            () => BetterContinents.Settings.OceanChannelsEnabled);
-                        AddHeightmapSubcommand(subcmd, "r", "rivers", "(0 to disable, 1 to enable)", 
-                            args => BetterContinents.Settings.RiversEnabled = int.Parse(args) != 0,
-                            () => BetterContinents.Settings.RiversEnabled);
-                        AddHeightmapSubcommand(subcmd, "me", "map edge drop off", "(0 to disable, 1 to enable)", 
-                            args => BetterContinents.Settings.MapEdgeDropoff = int.Parse(args) != 0,
-                            () => BetterContinents.Settings.MapEdgeDropoff);
-                        AddHeightmapSubcommand(subcmd, "mc", "mountains allowed at center", "(0 to disable, 1 to enable)", 
-                            args => BetterContinents.Settings.MountainsAllowedAtCenter = int.Parse(args) != 0,
-                            () => BetterContinents.Settings.MountainsAllowedAtCenter);
-                    });
-                command.AddSubcommand("h", "heightmap settings, get more info with 'bc param h help'", 
-                    subcmdConfig: subcmd =>
-                    {
-                        AddHeightmapSubcommand(subcmd, "fn", "set heightmap filename", 
-                            "(full path including filename, or nothing to disable)", 
-                            args =>
+                        if (BetterContinents.Settings.HasHeightmap)
+                            reload.AddCommand("hm", "Heightmap", "Reload the heightmap",
+                                HeightmapCommand(_ => BetterContinents.Settings.ReloadHeightmap()));
+                        if (BetterContinents.Settings.HasRoughmap)
+                            reload.AddCommand("rm", "Roughmap", "Reload the roughmap",
+                                HeightmapCommand(_ => BetterContinents.Settings.ReloadRoughmap()));
+                        if (BetterContinents.Settings.HasFlatmap)
+                            reload.AddCommand("fm", "Flatmap", "Reload the flatmap",
+                                HeightmapCommand(_ => BetterContinents.Settings.ReloadFlatmap()));
+                        if (BetterContinents.Settings.HasBiomemap)
+                            reload.AddCommand("bm", "Biomemap", "Reload the biomemap",
+                                HeightmapCommand(_ => BetterContinents.Settings.ReloadBiomemap()));
+                        if (BetterContinents.Settings.HasSpawnmap)
+                            reload.AddCommand("sm", "Spawnmap", "Reload the spawnmap",
+                                HeightmapCommand(_ => BetterContinents.Settings.ReloadSpawnmap()));
+                        if (BetterContinents.Settings.HasForestmap)
+                            reload.AddCommand("fom", "Forestmap", "Reload the forestmap",
+                                HeightmapCommand(_ => BetterContinents.Settings.ReloadForestmap()));
+                        if (BetterContinents.Settings.AnyImageMap)
+                        {
+                            reload.AddCommand("all", "All", "Reload all image maps", HeightmapCommand(_ =>
                             {
-                                if (string.IsNullOrEmpty(args))
+                                if (BetterContinents.Settings.HasHeightmap) BetterContinents.Settings.ReloadHeightmap();
+                                if (BetterContinents.Settings.HasRoughmap) BetterContinents.Settings.ReloadRoughmap();
+                                if (BetterContinents.Settings.HasFlatmap) BetterContinents.Settings.ReloadFlatmap();
+                                if (BetterContinents.Settings.HasBiomemap) BetterContinents.Settings.ReloadBiomemap();
+                                if (BetterContinents.Settings.HasSpawnmap) BetterContinents.Settings.ReloadSpawnmap();
+                                if (BetterContinents.Settings.HasForestmap) BetterContinents.Settings.ReloadForestmap();
+                            }));
+                        }
+                    });
+                }
+
+                bc.AddCommand("locs", "Dump locations", "print all location spawn instance counts to the console", _ => {
+                    var locationInstances = GameUtils.GetLocationInstances();
+
+                    var locationTypes = locationInstances.Values
+                        .GroupBy(l => l.m_location.m_prefabName)
+                        .ToDictionary(g => g.Key, g => g.ToList());
+                    foreach (var lg in locationTypes)
+                    {
+                        Console.instance.Print($"Placed {lg.Value.Count} {lg.Key} locations");
+                    }
+                    foreach (var boss in Bosses)
+                    {
+                        if (!locationTypes.ContainsKey(boss))
+                        {
+                            Console.instance.Print($"<color=orange>WARNING: No {boss} generated</color>");
+                        }
+                    }
+                });
+                bc.AddCommand("bosses", "Show bosses", "show pins for bosses, start temple and trader", _ => GameUtils.ShowOnMap(Bosses));
+                bc.AddCommand("show", "Show locations", "pin locations matching optional filter on the map", args => {
+                    GameUtils.ShowOnMap((args ?? "")
+                        .Split(new[] {' '}, StringSplitOptions.RemoveEmptyEntries)
+                        .Select(f => f.Trim())
+                        .ToArray());
+                });
+                bc.AddCommand("hide", "Hide locations", "remove pins matching optional filter from the map", args => {
+                    GameUtils.HideOnMap((args ?? "")
+                        .Split(new[] {' '}, StringSplitOptions.RemoveEmptyEntries)
+                        .Select(f => f.Trim())
+                        .ToArray());
+                });
+                bc.AddValue<bool>("clouds", "Clouds", "if the map clouds are enabled", 
+                    defaultValue: true,
+                    getter: () => Minimap.instance.m_mapImageLarge.material.GetTexture("_CloudTex") != TransparentTexture,
+                    setter: enable => {
+                        var mat = Minimap.instance.m_mapImageLarge.material;
+                        CloudTexture ??= mat.GetTexture("_CloudTex");
+                        TransparentTexture ??= UI.CreateFillTexture(new Color32(0, 0, 0, 0));
+                        mat.SetTexture("_CloudTex", enable ? TransparentTexture : CloudTexture);
+                    });
+                bc.AddValue<int>("mapds", "Minimap downscaling", "set minimap downscaling factor (for faster updates)",
+                    defaultValue: 2,
+                    list: new [] {0, 1, 2, 3},
+                    getter: () => GameUtils.MinimapDownscalingPower,
+                    setter: val => {
+                        GameUtils.MinimapDownscalingPower = Mathf.Clamp(val, 0, 3);
+                        GameUtils.FastMinimapRegen();
+                    });
+                bc.AddCommand("refresh", "Refresh", "resets all vegetation and locations (done automatically on every change)", 
+                    _ => GameUtils.Refresh());
+                bc.AddCommand("despawnall", "Despawn all", "despawn everything", 
+                    _ => GameUtils.DespawnAll());
+                bc.AddCommand("resetall", "Reset all", "reset everything (WARNING: this deletes everything that has been build in the map!)", _ => {
+                    GameUtils.ResetAll();
+                    Console.instance.Print($"<color=orange>All constructions removed!</color>");
+                });
+                bc.AddCommand("regenloc", "Regenerate locs", "regenerate all locations", _ => {
+                    bool prevLocSetting = BetterContinents.ConfigDebugSkipDefaultLocationPlacement.Value;
+                    BetterContinents.ConfigDebugSkipDefaultLocationPlacement.Value = false;
+                    GameUtils.RegenerateLocations();
+                    BetterContinents.ConfigDebugSkipDefaultLocationPlacement.Value = prevLocSetting;
+                    Console.instance.Print($"<color=orange>All locations regenerated!</color>");
+                });
+                bc.AddCommand("scr", "Save map screenshot", "save the minimap to a png, optionally pass resolution, default is 2048", arg => {
+                    var filename = DateTime.Now.ToString("yyyy-dd-M-HH-mm-ss") + ".png";
+                    var screenshotDir = Path.Combine(Utils.GetSaveDataPath(), "BetterContinents", WorldGenerator.instance.m_world.m_name);
+                    var path = Path.Combine(screenshotDir, filename);
+                    int size = string.IsNullOrEmpty(arg) ? 2048 : int.Parse(arg);
+                    GameUtils.SaveMinimap(path, size);
+                    Console.instance.Print($"Map screenshot saved to {path}, size {size} x {size}");
+                });
+                bc.AddCommand("savepreset", "Save preset", "save current world settings as a preset, including a thumbnail, pass preset name as argument", 
+                    arg =>
+                    {
+                        arg ??= WorldGenerator.instance.m_world.m_name;
+                        Presets.Save(BetterContinents.Settings, arg);
+                    });
+                
+                bc.AddGroup("g", "Global", "global settings, get more info with 'bc g help'", 
+                    group => { 
+                        // AddHeightmapValue(subcmd, "cs", "continent size", 0, new AcceptableValueRange<float>(0, 1), 
+                        //     value => BetterContinents.Settings.ContinentSize = value,
+                        //     () => BetterContinents.Settings.ContinentSize);
+                        // AddHeightmapValue(subcmd, "ma", "mountains amount", 0.5f, new AcceptableValueRange<float>(0, 1),
+                        //     value => BetterContinents.Settings.MountainsAmount = value,
+                        //     () => BetterContinents.Settings.MountainsAmount);
+                        // AddHeightmapValue(subcmd, "sl", "sea level adjustment", 0.5f, new AcceptableValueRange<float>(0, 1),
+                        //     value => BetterContinents.Settings.SeaLevel = value,
+                        //     () => BetterContinents.Settings.SeaLevel);
+                        // AddHeightmapValue(subcmd, "oc", "ocean channels", false, 
+                        //     args => BetterContinents.Settings.OceanChannelsEnabled = int.Parse(args) != 0,
+                        //     () => BetterContinents.Settings.OceanChannelsEnabled);
+                        group.AddValue<bool>("r", "Enable rivers", "whether rivers are enabled",
+                            defaultValue: true,
+                            setter: SetHeightmapValue<bool>(value => BetterContinents.Settings.RiversEnabled = value),
+                            getter: () => BetterContinents.Settings.RiversEnabled);
+                        group.AddValue<bool>("me", "Map edge drop off", "whether the map drops away at the boundary",
+                            defaultValue: true,
+                            setter: SetHeightmapValue<bool>(value => BetterContinents.Settings.MapEdgeDropoff = value),
+                            getter: () => BetterContinents.Settings.MapEdgeDropoff);
+                        group.AddValue<bool>("mc", "Allow mountains in center", "whether the center of the map (usually the spawn area), is flattened",
+                            defaultValue: false,
+                            setter: SetHeightmapValue<bool>(value => BetterContinents.Settings.MountainsAllowedAtCenter = value),
+                            getter: () => BetterContinents.Settings.MountainsAllowedAtCenter);
+                    });
+
+                bc.AddGroup("h", "Heightmap", "heightmap settings, get more info with 'bc param h help'",
+                    group => { 
+                        group.AddValue<string>("fn", "Heightmap filename", "set heightmap filename (full path including filename, or nothing to disable)",
+                            defaultValue: string.Empty,
+                            setter: SetHeightmapValue<string>(path => {
+                                if (string.IsNullOrEmpty(path))
                                 {
                                     BetterContinents.Settings.DisableHeightmap();
                                     Console.instance.Print($"<color=orange>Heightmap disabled!</color>");
                                 }
-                                else if (!File.Exists(BetterContinents.CleanPath(args)))
-                                    Console.instance.Print($"<color=red>ERROR: {args} doesn't exist</color>");
+                                else if (!File.Exists(BetterContinents.CleanPath(path)))
+                                    Console.instance.Print($"<color=red>ERROR: {path} doesn't exist</color>");
                                 else
-                                    BetterContinents.Settings.SetHeightmapPath(args);
-                            });
-                        AddHeightmapSubcommand(subcmd, "ov", "heightmap override all", "(0 to disable, 1 to enable)",
-                            args => BetterContinents.Settings.HeightmapOverrideAll = int.Parse(args) != 0,
-                            () => BetterContinents.Settings.HeightmapOverrideAll);
-                        AddHeightmapSubcommand(subcmd, "am", "heightmap amount", "(between 0 and 5)", 
-                            args => BetterContinents.Settings.HeightmapAmount = float.Parse(args),
-                            () => BetterContinents.Settings.HeightmapAmount);
-                        AddHeightmapSubcommand(subcmd, "bl", "heightmap blend", "(between 0 and 1)", 
-                            args => BetterContinents.Settings.HeightmapBlend = float.Parse(args),
-                            () => BetterContinents.Settings.HeightmapBlend);
-                        AddHeightmapSubcommand(subcmd, "ad", "heightmap add", "(between -1 and 1)", 
-                            args => BetterContinents.Settings.HeightmapAdd = float.Parse(args),
-                            () => BetterContinents.Settings.HeightmapAdd);
-                        AddHeightmapSubcommand(subcmd, "ma", "heightmap mask", "(between 0 and 1)", 
-                            args => BetterContinents.Settings.HeightmapMask = float.Parse(args),
-                            () => BetterContinents.Settings.HeightmapMask);
+                                    BetterContinents.Settings.SetHeightmapPath(path);
+                            }),
+                            getter: () => BetterContinents.Settings.GetHeightmapPath());
+                        group.AddValue<bool>("ov", "Heightmap Override All", "causes the terrain to conform to the heightmap, ignoring biome specific variance",
+                            defaultValue: false,
+                            setter: SetHeightmapValue<bool>(value => BetterContinents.Settings.HeightmapOverrideAll = value),
+                            getter: () => BetterContinents.Settings.HeightmapOverrideAll);
+                        group.AddValue<float>("am", "Heightmap Amount", "heightmap amount",
+                            defaultValue: 1f, minValue: 0, maxValue: 5, 
+                            setter: SetHeightmapValue<float>(value => BetterContinents.Settings.HeightmapAmount = value),
+                            getter: () => BetterContinents.Settings.HeightmapAmount);
+                        group.AddValue<float>("bl", "Heightmap Blend", "heightmap blend", 
+                            defaultValue: 1f, minValue: 0, maxValue: 1,   
+                            setter: SetHeightmapValue<float>(value => BetterContinents.Settings.HeightmapBlend = value),
+                            getter: () => BetterContinents.Settings.HeightmapBlend);
+                        group.AddValue<float>("ad", "Heightmap Add", "heightmap add",
+                            defaultValue: 0f, minValue: -1, maxValue: 1, 
+                            setter: SetHeightmapValue<float>(value => BetterContinents.Settings.HeightmapAdd = value),
+                            getter: () => BetterContinents.Settings.HeightmapAdd);
+                        group.AddValue<float>("ma", "Heightmap Mask", "heightmap mask",
+                            defaultValue: 0f, minValue: 0, maxValue: 1, 
+                            setter: SetHeightmapValue<float>(value => BetterContinents.Settings.HeightmapMask = value),
+                            getter: () => BetterContinents.Settings.HeightmapMask);
                     });
 
-                string EnumHelp<T>() => "(" + string.Join(", ", Enum.GetNames(typeof(T))) + ")";
-                T EnumParse<T>(string str) => (T)Enum.Parse(typeof(T), str, ignoreCase: true);
-                void AddNoiseCommands(AddCmdActionDelegate addCmdAction, GetSettingsFromArgsDelegate getSettings)
+                bc.AddGroup("r", "Roughmap", "roughmap settings, get more info with 'bc param r help'", group => {
+                    group.AddValue<string>("fn", "Roughmap Filename", "set roughmap filename (full path including filename, or nothing to disable)",
+                        defaultValue: string.Empty,
+                        setter: SetHeightmapValue<string>(path => {
+                            if (string.IsNullOrEmpty(path))
+                            {
+                                BetterContinents.Settings.DisableRoughmap();
+                                Console.instance.Print($"<color=orange>Roughmap disabled!</color>");
+                            }
+                            else if (!File.Exists(BetterContinents.CleanPath(path)))
+                                Console.instance.Print($"<color=red>ERROR: {path} doesn't exist</color>");
+                            else
+                                BetterContinents.Settings.SetRoughmapPath(path);
+                        }),
+                        getter: () => BetterContinents.Settings.GetRoughmapPath());
+                    group.AddValue<float>("bl", "Roughmap Blend", "roughmap blend",
+                        defaultValue: 1f, minValue: 0, maxValue: 1,   
+                        setter: SetHeightmapValue<float>(value => BetterContinents.Settings.RoughmapBlend = value),
+                        getter: () => BetterContinents.Settings.RoughmapBlend);
+                });
+                // bc.AddGroup("f", "flatmap settings, get more info with 'bc param f help'", 
+                // subcmd =>
+                // {
+                //     AddHeightmapSubcommand(subcmd, "fn", "set flatmap filename", "(full path including filename, or nothing to disable)", args =>
+                //     {
+                //         if(string.IsNullOrEmpty(args))
+                //         {
+                //             BetterContinents.Settings.DisableFlatmap();
+                //             Console.instance.Print($"<color=orange>Flatmap disabled!</color>");
+                //         }
+                //         else if (!File.Exists(BetterContinents.CleanPath(args)))
+                //             Console.instance.Print($"<color=red>ERROR: {args} doesn't exist</color>");
+                //         else
+                //         {
+                //             BetterContinents.Settings.SetFlatmapPath(args);
+                //             if (BetterContinents.Settings.UseRoughInvertedAsFlat)
+                //             {
+                //                 Console.instance.Print(
+                //                     $"<color=orange>WARNING: 'Use Rough Inverted as Flat' is enabled so flatmap has no effect. Use 'bc urm 0' to disable it.</color>");
+                //             }
+                //         }
+                //     });
+                //
+                //     AddHeightmapSubcommand(subcmd, "u", "use roughmap inverted for flat", "(0 to disable, 1 to enable)", args =>
+                //     {
+                //         BetterContinents.Settings.UseRoughInvertedAsFlat = int.Parse(args) != 0;
+                //     });
+                //     AddHeightmapSubcommand(subcmd, "bl", "flatmap blend", "(between 0 and 1)", args =>
+                //     {
+                //         BetterContinents.Settings.FlatmapBlend = float.Parse(args);
+                //     });
+                // });
+                bc.AddGroup("b", "Biomemap", "biomemap settings, get more info with 'bc param b help'", group => {
+                    group.AddValue<string>("fn", "Biomemap Filename", "set biomemap filename (full path including filename, or nothing to disable)",
+                        defaultValue: string.Empty,
+                        setter: SetHeightmapValue<string>(path => {
+                            if (string.IsNullOrEmpty(path))
+                            {
+                                BetterContinents.Settings.DisableBiomemap();
+                                Console.instance.Print($"<color=orange>Biomemap disabled!</color>");
+                            }
+                            else if (!File.Exists(BetterContinents.CleanPath(path)))
+                                Console.instance.Print($"<color=red>ERROR: {path} doesn't exist</color>");
+                            else
+                                BetterContinents.Settings.SetBiomemapPath(path);
+                        }),
+                        getter: () => BetterContinents.Settings.GetBiomemapPath());
+                });
+                bc.AddGroup("s", "Spawnmap", "spawnmap settings, get more info with 'bc param s help'", group => {
+                    group.AddValue<string>("fn", "Spawnmap Filename", "set spawnmap filename (full path including filename, or nothing to disable)",
+                        defaultValue: string.Empty,
+                        setter: SetHeightmapValue<string>(path => {
+                            if (string.IsNullOrEmpty(path))
+                            {
+                                BetterContinents.Settings.DisableSpawnmap();
+                                Console.instance.Print($"<color=orange>Spawnmap disabled!</color>");
+                                Console.instance.Print($"<color=orange>INFO: Use 'bc regenloc' to update the location spawns in the world</color>");
+                            }
+                            else if (!File.Exists(BetterContinents.CleanPath(path)))
+                                Console.instance.Print($"<color=red>ERROR: {path} doesn't exist</color>");
+                            else
+                            {
+                                BetterContinents.Settings.SetSpawnmapPath(path);
+                                Console.instance.Print($"<color=orange>INFO: Use 'bc regenloc' to update the location spawns in the world</color>");
+                            }
+                        }),
+                        getter: () => BetterContinents.Settings.GetSpawnmapPath());
+                });
+                bc.AddGroup("fo", "Forest", "forest settings, get more info with 'bc param fo help'", group => {
+                    group.AddValue<float>("sc", "Forest Scale", "forest scale",
+                        defaultValue: 0.5f, minValue: 0f, maxValue: 1f,
+                        setter: SetHeightmapValue<float>(value => BetterContinents.Settings.ForestScaleFactor = value), 
+                        getter: () => BetterContinents.Settings.ForestScaleFactor);
+                    group.AddValue<float>("am", "Forest Amount", "forest amount",
+                        defaultValue: 0.5f, minValue: 0f, maxValue: 1f,
+                        setter: SetHeightmapValue<float>(value => BetterContinents.Settings.ForestAmount = value), 
+                        getter: () => BetterContinents.Settings.ForestAmount);
+                    group.AddValue<bool>("ffo", "Forest Factor Override All", "forest factor override all trees",
+                        setter: SetHeightmapValue<bool>(value => {
+                            BetterContinents.Settings.ForestFactorOverrideAllTrees = value;
+                            Console.instance.Print("<color=orange>NOTE: You need to reload the world to apply this change to the forest factor override!</color>");
+                        }),
+                        getter: () => BetterContinents.Settings.ForestFactorOverrideAllTrees);
+                    group.AddValue<string>("fn", "Forestmap Filename", "set forestmap filename (full path including filename, or nothing to disable)",
+                        defaultValue: string.Empty,
+                        setter: SetHeightmapValue<string>(path => {
+                            if (string.IsNullOrEmpty(path))
+                            {
+                                BetterContinents.Settings.DisableForestmap();
+                                Console.instance.Print($"<color=orange>Forestmap disabled!</color>");
+                            }
+                            else if (!File.Exists(BetterContinents.CleanPath(path)))
+                                Console.instance.Print($"<color=red>ERROR: {path} doesn't exist</color>");
+                            else
+                                BetterContinents.Settings.SetForestmapPath(path);
+                        }),
+                        getter: () => BetterContinents.Settings.GetForestmapPath());
+                    group.AddValue<float>("mu", "Forestmap Multiply", "forestmap multiply", 
+                        defaultValue: 1f, minValue: 0f, maxValue: 1f,
+                        setter: SetHeightmapValue<float>(value => BetterContinents.Settings.ForestmapMultiply = value), 
+                        getter: () => BetterContinents.Settings.ForestmapMultiply);
+                    group.AddValue<float>("mu", "Forestmap Add", "forestmap add",  
+                        defaultValue: 0f, minValue: 0f, maxValue: 1f,
+                        setter: SetHeightmapValue<float>(value => BetterContinents.Settings.ForestmapAdd = value), 
+                        getter: () => BetterContinents.Settings.ForestmapAdd);
+                });
+                // bc.AddGroup("ri", "ridge settings, get more info with 'bc param ri help'", 
+                // subcmd =>
+                // {
+                //     AddHeightmapSubcommand(subcmd, "mh", "ridges max height", "(between 0 and 1)", args =>
+                //     {
+                //         BetterContinents.Settings.MaxRidgeHeight = float.Parse(args);
+                //     });
+                //     AddHeightmapSubcommand(subcmd, "si", "ridge size", "(between 0 and 1)", args => BetterContinents.Settings.RidgeSize = float.Parse(args));
+                //     AddHeightmapSubcommand(subcmd, "bl", "ridge blend", "(between 0 and 1)", args => BetterContinents.Settings.RidgeBlend = float.Parse(args));
+                //     AddHeightmapSubcommand(subcmd, "am", "ridge amount", "(between 0 and 1)", args => BetterContinents.Settings.RidgeAmount = float.Parse(args));
+                // });
+                bc.AddGroup("st", "Start Position", "start position settings, get more info with 'bc param st help'", group => {
+                    group.AddValue<bool>("os", "Override Start Position", "override start position",
+                        setter: SetHeightmapValue<bool>(value => BetterContinents.Settings.OverrideStartPosition = value),
+                        getter: () => BetterContinents.Settings.OverrideStartPosition);
+                    group.AddValue<float>("x", "Start Position X", "start position x",
+                        defaultValue: 1f, minValue: 0f, maxValue: 1f,
+                        setter: SetHeightmapValue<float>(value => {
+                            BetterContinents.Settings.StartPositionX = value;
+                            Console.instance.Print($"<color=orange>INFO: Use 'bc regenloc' to update the location spawns in the world (including the start location)</color>");
+                        }), 
+                        getter: () => BetterContinents.Settings.StartPositionX);
+                    group.AddValue<float>("y", "Start Position Y", "start position y",  
+                        defaultValue: 1f, minValue: 0f, maxValue: 1f,
+                        setter: SetHeightmapValue<float>(value => {
+                            BetterContinents.Settings.StartPositionY = value;
+                            Console.instance.Print($"<color=orange>INFO: Use 'bc regenloc' to update the location spawns in the world (including the start location)</color>");
+                        }), 
+                        getter: () => BetterContinents.Settings.StartPositionY);
+                });
+
+                void AddNoiseCommands(Command.SubcommandBuilder group, NoiseStackSettings.NoiseSettings settings, bool isWarp = false)
                 {
                     // Basic
-                    addCmdAction("nt", "noise type", EnumHelp<FastNoiseLite.NoiseType>(), 
-                        args => getSettings().NoiseType = EnumParse<FastNoiseLite.NoiseType>(args),
-                        () => getSettings().NoiseType);
-                    addCmdAction("fq", "frequency", "(0.0001 to 0.001)", 
-                        args => getSettings().Frequency = float.Parse(args),
-                        () => getSettings().Frequency);
+                    group.AddValue("nt", "Noise Type", "noise type",
+                        defaultValue: FastNoiseLite.NoiseType.OpenSimplex2,
+                        setter: SetHeightmapValue<FastNoiseLite.NoiseType>(value => settings.NoiseType = value),
+                        getter: () => settings.NoiseType);
+                    group.AddValue("fq", "Frequency", "frequency",
+                        defaultValue: 0.0005f,
+                        setter: SetHeightmapValue<float>(value => settings.Frequency = value),
+                        getter: () => settings.Frequency);
+                    
                     // Fractal
-                    addCmdAction("ft", "fractal type", EnumHelp<FastNoiseLite.FractalType>(), 
-                        args => getSettings().FractalType = EnumParse<FastNoiseLite.FractalType>(args),
-                        () => getSettings().FractalType);
-                    addCmdAction("fo", "fractal octaves", "(1 to 10)", 
-                        args => getSettings().FractalOctaves = int.Parse(args),
-                        () => getSettings().FractalOctaves);
-                    addCmdAction("fl", "fractal lacunarity", "(0 to 10)", 
-                        args => getSettings().FractalLacunarity = float.Parse(args),
-                        () => getSettings().FractalLacunarity);
-                    addCmdAction("fg", "fractal gain", "(0 to 1)", 
-                        args => getSettings().FractalGain = float.Parse(args),
-                        () => getSettings().FractalGain);
-                    addCmdAction("ws", "weighted strength", "(-1 to 1)", 
-                        args => getSettings().FractalWeightedStrength = float.Parse(args),
-                        () => getSettings().FractalWeightedStrength);
-                    addCmdAction("ps", "ping-pong strength", "(0 to 10)", 
-                        args => getSettings().FractalPingPongStrength = float.Parse(args),
-                        () => getSettings().FractalPingPongStrength);
-                    // Cellular
-                    addCmdAction("cf", "cellular distance function", EnumHelp<FastNoiseLite.CellularDistanceFunction>(), 
-                        args => getSettings().CellularDistanceFunction = EnumParse<FastNoiseLite.CellularDistanceFunction>(args),
-                        () => getSettings().CellularDistanceFunction);
-                    addCmdAction("ct", "cellular return type", EnumHelp<FastNoiseLite.CellularReturnType>(), 
-                        args => getSettings().CellularReturnType = EnumParse<FastNoiseLite.CellularReturnType>(args),
-                        () => getSettings().CellularReturnType);
-                    addCmdAction("cj", "cellular jitter", "(0 to 2)", 
-                        args => getSettings().CellularJitter = float.Parse(args),
-                        () => getSettings().CellularJitter);
-                    // Warp
-                    addCmdAction("dt", "domain warp type", EnumHelp<FastNoiseLite.DomainWarpType>(), 
-                        args => getSettings().DomainWarpType = EnumParse<FastNoiseLite.DomainWarpType>(args),
-                        () => getSettings().DomainWarpType);
-                    addCmdAction("da", "domain warp amp", "(0 to 200)", 
-                        args => getSettings().DomainWarpAmp = float.Parse(args),
-                        () => getSettings().DomainWarpAmp);
-                    // Filters
-                    addCmdAction("in", "invert", "(0 or 1)", 
-                        args => getSettings().Invert = int.Parse(args) != 0,
-                        () => getSettings().Invert);
-                    addCmdAction("ss", "smooth step", "(0 - 1) (0 - 1) or off to disable", 
-                        args =>
-                        {
-                            var parts = args.Split(' ');
-                            var settings = getSettings();
-                            if (parts.Length == 1 && parts[0] == "off")
-                            {
-                                settings.SmoothStepStart = settings.SmoothStepEnd = null;
-                            }
-                            else if(parts.Length == 2)
-                            {
-                                settings.SmoothStepStart = int.Parse(parts[0]);
-                                settings.SmoothStepEnd = int.Parse(parts[1]);
-                            }
-                            else
-                            {
-                                throw new ArgumentException("smooth step expects either two float arguments, or 0 to disable");
-                            }
-                        },
-                        () =>
-                        {
-                            var settings = getSettings();
-                            return settings.SmoothStepStart == null || settings.SmoothStepEnd == null
-                                ? "(disabled)"
-                                : $"[{settings.SmoothStepStart}, {settings.SmoothStepEnd}]";
-                        });
-                    addCmdAction("th", "threshold", "(0 to 1) or off to disable", 
-                        args => getSettings().Threshold = args == "off" ? (float?) null : float.Parse(args),
-                        () => (object)getSettings().Threshold ?? "(disabled)");
-                    addCmdAction("ra", "range", "(0 - 1) (0 - 1) or off to disable", 
-                        args =>
-                        {
-                            var parts = args.Split(' ');
-                            var settings = getSettings();
-                            if (parts.Length == 1 && parts[0] == "off")
-                            {
-                                settings.RangeStart = settings.RangeEnd = null;
-                            }
-                            else if(parts.Length == 2)
-                            {
-                                settings.RangeStart = int.Parse(parts[0]);
-                                settings.RangeEnd = int.Parse(parts[1]);
-                            }
-                            else
-                            {
-                                throw new ArgumentException("range expects either two float arguments, or 0 to disable");
-                            }
-                        },
-                        () =>
-                        {
-                            var settings = getSettings();
-                            return settings.RangeStart == null || settings.RangeEnd == null
-                                ? "(disabled)"
-                                : $"[{settings.RangeStart}, {settings.RangeEnd}]";
-                        });
-                    addCmdAction("th", "opacity", "(0 to 1) or off to disable", 
-                        args => getSettings().Opacity = args == "off" ? (float?) null : float.Parse(args),
-                        () => (object)getSettings().Opacity ?? "(disabled)");
-                }
-                
-                command.AddSubcommand("hb", "base height noise settings, get more info with 'bc param hb help'", subcmdConfig: subcmd =>
-                {
-                    AddNoiseCommands((cmd, desc, args, action, getCurrentValue) => AddHeightmapSubcommand(subcmd, cmd, desc, args, action, getCurrentValue),
-                        () => BetterContinents.Settings.BaseHeightNoise.BaseLayer);
-                });
-                
-                command.AddSubcommand("hl", "height layer noise settings", subcmdConfig: subcmd =>
-                {
-                    AddHeightmapSubcommand(subcmd, "num", "layer count", "(count from 0 to 4)", args => BetterContinents.Settings.BaseHeightNoise.SetNoiseLayerCount(int.Parse(args)));
-                    for (int i = 0; i < 4; i++)
-                    {
-                        int index = i;
-                        subcmd.AddSubcommand(index.ToString(), $"height layer {index}", subcmdConfig: subcmdLayer =>
-                        {
-                            subcmdLayer.AddSubcommand("n", $"height layer {index} noise", 
-                                subcmdConfig: subcmdLayerPart => AddNoiseCommands(
-                                    (cmd, desc, args, action, getCurrentValue) => AddHeightmapSubcommand(subcmdLayerPart, cmd, desc, args, action, getCurrentValue),
-                                    () => BetterContinents.Settings.BaseHeightNoise.Layers[index].noiseSettings));
-                            subcmdLayer.AddSubcommand("nw", $"height layer {index} noise domain wrap", 
-                                subcmdConfig: subcmdLayerPart => AddNoiseCommands(
-                                    (cmd, desc, args, action, getCurrentValue) => AddHeightmapSubcommand(subcmdLayerPart, cmd, desc, args, action, getCurrentValue),
-                                    () => BetterContinents.Settings.BaseHeightNoise.Layers[index].noiseWarpSettings));
-                            subcmdLayer.AddSubcommand("m", $"height layer {index} mask", 
-                                subcmdConfig: subcmdLayerPart => AddNoiseCommands(
-                                    (cmd, desc, args, action, getCurrentValue) => AddHeightmapSubcommand(subcmdLayerPart, cmd, desc, args, action, getCurrentValue),
-                                    () => BetterContinents.Settings.BaseHeightNoise.Layers[index].maskSettings));
-                            subcmdLayer.AddSubcommand("mw", $"height layer {index} mask domain warp", 
-                                subcmdConfig: subcmdLayerPart => AddNoiseCommands(
-                                    (cmd, desc, args, action, getCurrentValue) => AddHeightmapSubcommand(subcmdLayerPart, cmd, desc, args, action, getCurrentValue),
-                                    () => BetterContinents.Settings.BaseHeightNoise.Layers[index].maskWarpSettings));
-                        });
-                    }
-                    // AddNoiseCommands((cmd, desc, args, action) => AddHeightmapSubcommand(subcmd, cmd, desc, "(n, nw, m, or mw) (layer index 0 - 4) " + args, action),
-                    //     (ref string args) =>
-                    //     {
-                    //         var parts = args.Split(' ');
-                    //         int index = int.Parse(parts[0]);
-                    //         string part = parts[1];
-                    //         args = parts.Length >= 3 ? parts[2] : string.Empty;
-                    //         
-                    //         if (index >= BetterContinents.Settings.BaseHeightNoise.Layers.Count)
-                    //         {
-                    //             throw new IndexOutOfRangeException("Layer index out of range, set layer count first");
-                    //         }
-                    //
-                    //         NoiseStackSettings.NoiseSettings settings = null;
-                    //         switch (part)
-                    //         {
-                    //             case "n": settings = BetterContinents.Settings.BaseHeightNoise.Layers[index].noiseSettings; break; 
-                    //             case "nw": settings = BetterContinents.Settings.BaseHeightNoise.Layers[index].noiseWarpSettings; break;
-                    //             case "m": settings = BetterContinents.Settings.BaseHeightNoise.Layers[index].maskSettings; break;
-                    //             case "mw": settings = BetterContinents.Settings.BaseHeightNoise.Layers[index].maskWarpSettings; break;
-                    //         }
-                    //         
-                    //         if (settings == null)
-                    //         {
-                    //             throw new ArgumentException($"height layer part id unknown: {part}");
-                    //         }
-                    //
-                    //         if(string.IsNullOrEmpty(args.Trim()))
-                    //         {
-                    //             settings.Dump(Console.instance.Print);
-                    //         }
-                    //
-                    //
-                    //         return settings;
-                    //     });
-                });
-                
-                command.AddSubcommand("r", "roughmap settings, get more info with 'bc param r help'", subcmdConfig: subcmd =>
-                {
-                    AddHeightmapSubcommand(subcmd, "fn", "set roughmap filename", "(full path including filename, or nothing to disable)", args =>
-                    {
-                        if (string.IsNullOrEmpty(args))
-                        {
-                            BetterContinents.Settings.DisableRoughmap();
-                            Console.instance.Print($"<color=orange>Roughmap disabled!</color>");
-                        }
-                        else if (!File.Exists(BetterContinents.CleanPath(args)))
-                            Console.instance.Print($"<color=red>ERROR: {args} doesn't exist</color>");
-                        else
-                            BetterContinents.Settings.SetRoughmapPath(args);
-                    });
-                    AddHeightmapSubcommand(subcmd, "bl", "roughmap blend", "(between 0 and 1)", args =>
-                    {
-                        BetterContinents.Settings.RoughmapBlend = float.Parse(args);
-                    });
-                });
-                command.AddSubcommand("f", "flatmap settings, get more info with 'bc param f help'", subcmdConfig: subcmd =>
-                {
-                    AddHeightmapSubcommand(subcmd, "fn", "set flatmap filename", "(full path including filename, or nothing to disable)", args =>
-                    {
-                        if(string.IsNullOrEmpty(args))
-                        {
-                            BetterContinents.Settings.DisableFlatmap();
-                            Console.instance.Print($"<color=orange>Flatmap disabled!</color>");
-                        }
-                        else if (!File.Exists(BetterContinents.CleanPath(args)))
-                            Console.instance.Print($"<color=red>ERROR: {args} doesn't exist</color>");
-                        else
-                        {
-                            BetterContinents.Settings.SetFlatmapPath(args);
-                            if (BetterContinents.Settings.UseRoughInvertedAsFlat)
-                            {
-                                Console.instance.Print(
-                                    $"<color=orange>WARNING: 'Use Rough Inverted as Flat' is enabled so flatmap has no effect. Use 'bc urm 0' to disable it.</color>");
-                            }
-                        }
-                    });
+                    group.AddValue("ft", "Fractal Type", "fractal type", 
+                        defaultValue: isWarp? FastNoiseLite.FractalType.None : FastNoiseLite.FractalType.FBm, 
+                        list: isWarp? NoiseStackSettings.NoiseSettings.WarpFractalTypes : NoiseStackSettings.NoiseSettings.NonFractalTypes,
+                        setter: SetHeightmapValue<FastNoiseLite.FractalType>(value => settings.FractalType = value),
+                        getter: () => settings.FractalType);
 
-                    AddHeightmapSubcommand(subcmd, "u", "use roughmap inverted for flat", "(0 to disable, 1 to enable)", args =>
+                    if (settings.FractalType != FastNoiseLite.FractalType.None)
                     {
-                        BetterContinents.Settings.UseRoughInvertedAsFlat = int.Parse(args) != 0;
-                    });
-                    AddHeightmapSubcommand(subcmd, "bl", "flatmap blend", "(between 0 and 1)", args =>
-                    {
-                        BetterContinents.Settings.FlatmapBlend = float.Parse(args);
-                    });
-                });
-                command.AddSubcommand("b", "biomemap settings, get more info with 'bc param b help'", subcmdConfig: subcmd =>
-                {
-                    AddHeightmapSubcommand(subcmd, "fn", "set biomemap filename", "(full path including filename, or nothing to disable)", args =>
-                    {
-                        if(string.IsNullOrEmpty(args))
+                        group.AddValue<int>("fo", "Fractal Octaves", "fractal octaves",
+                            defaultValue: 4, minValue: 1, maxValue: 10,
+                            setter: SetHeightmapValue<int>(value => settings.FractalOctaves = value),
+                            getter: () => settings.FractalOctaves);
+                        group.AddValue("fl", "Fractal Lacunarity", "fractal lacunarity",
+                            defaultValue: 2, minValue: 0, maxValue: 10,
+                            setter: SetHeightmapValue<float>(value => settings.FractalLacunarity = value),
+                            getter: () => settings.FractalLacunarity);
+                        group.AddValue("fg", "Fractal Gain", "fractal gain",
+                            defaultValue: 0.5f, minValue: 0, maxValue: 2,
+                            setter: SetHeightmapValue<float>(value => settings.FractalGain = value),
+                            getter: () => settings.FractalGain);
+                        group.AddValue("ws", "Weighted Strength", "weighted strength",
+                            defaultValue: 0, minValue: -2, maxValue: 2,
+                            setter: SetHeightmapValue<float>(value => settings.FractalWeightedStrength = value),
+                            getter: () => settings.FractalWeightedStrength);
+                        if(settings.FractalType == FastNoiseLite.FractalType.PingPong)
                         {
-                            BetterContinents.Settings.DisableBiomemap();
-                            Console.instance.Print($"<color=orange>Biomemap disabled!</color>");
+                            group.AddValue("ps", "Ping-Pong Strength", "ping-pong strength",
+                                defaultValue: 2, minValue: 0, maxValue: 10,
+                                setter: SetHeightmapValue<float>(value => settings.FractalPingPongStrength = value),
+                                getter: () => settings.FractalPingPongStrength);
                         }
-                        else if (!File.Exists(BetterContinents.CleanPath(args)))
-                            Console.instance.Print($"<color=red>ERROR: {args} doesn't exist</color>");
-                        else
-                            BetterContinents.Settings.SetBiomemapPath(args);
-                    });
-                });
-                command.AddSubcommand("s", "spawnmap settings, get more info with 'bc param s help'", subcmdConfig: subcmd =>
-                {
-                    AddHeightmapSubcommand(subcmd, "fn", "set spawnmap filename", "(full path including filename, or nothing to disable)", args =>
+                    }
+
+                    if (settings.NoiseType == FastNoiseLite.NoiseType.Cellular)
                     {
-                        if(string.IsNullOrEmpty(args))
+                        // Cellular
+                        group.AddValue("cf", "Cellular Distance Function", "cellular distance function",
+                            defaultValue: FastNoiseLite.CellularDistanceFunction.Euclidean,
+                            setter: SetHeightmapValue<FastNoiseLite.CellularDistanceFunction>(value =>
+                                settings.CellularDistanceFunction = value),
+                            getter: () => settings.CellularDistanceFunction);
+                        group.AddValue("ct", "Cellular Return Type", "cellular return type",
+                            defaultValue: FastNoiseLite.CellularReturnType.Distance2Div,
+                            setter: SetHeightmapValue<FastNoiseLite.CellularReturnType>(value =>
+                                settings.CellularReturnType = value),
+                            getter: () => settings.CellularReturnType);
+                        group.AddValue("cj", "Cellular Jitter", "cellular jitter",
+                            defaultValue: 1, minValue: 0, maxValue: 2,
+                            setter: SetHeightmapValue<float>(value => settings.CellularJitter = value),
+                            getter: () => settings.CellularJitter);
+                    }
+
+                    if (isWarp)
+                    {
+                        // Warp
+                        group.AddValue("dt", "Domain Warp Type", "domain warp type",
+                            defaultValue: FastNoiseLite.DomainWarpType.OpenSimplex2,
+                            setter: SetHeightmapValue<FastNoiseLite.DomainWarpType>(value =>
+                                settings.DomainWarpType = value),
+                            getter: () => settings.DomainWarpType);
+                        group.AddValue("da", "Domain Warp Amp", "domain warp amp",
+                            defaultValue: 50, minValue: 0, maxValue: 20000,
+                            setter: SetHeightmapValue<float>(value => settings.DomainWarpAmp = value),
+                            getter: () => settings.DomainWarpAmp);
+                    }
+
+                    // Filters
+                    group.AddValue("in", "Invert", "invert",
+                        setter: SetHeightmapValue<bool>(value => settings.Invert = value),
+                        getter: () => settings.Invert);
+                    group.AddValueNullable<float>("sts", "Smooth Threshold Start", "smooth threshold start",
+                        defaultValue: null, minValue: 0, maxValue: 1,
+                        getter: () => settings.SmoothThresholdStart,
+                        setter: SetHeightmapValue<float?>(value => settings.SmoothThresholdStart = value));
+                    group.AddValueNullable<float>("ste", "Smooth Threshold End", "smooth threshold end",
+                        defaultValue: null, minValue: 0, maxValue: 1,
+                        getter: () => settings.SmoothThresholdEnd,
+                        setter: SetHeightmapValue<float?>(value => settings.SmoothThresholdEnd = value));
+                    group.AddValueNullable<float>("th", "Threshold", "threshold",
+                        defaultValue: null, minValue: 0, maxValue: 1,
+                        getter: () => settings.Threshold,
+                        setter: SetHeightmapValue<float?>(value => settings.Threshold = value));
+                    group.AddValueNullable<float>("ras", "Range Start", "range start",
+                        defaultValue: null, minValue: 0, maxValue: 1,
+                        getter: () => settings.RangeStart,
+                        setter: SetHeightmapValue<float?>(value => settings.RangeStart = value));
+                    group.AddValueNullable<float>("rae", "Range End", "range end",
+                        defaultValue: null, minValue: 0, maxValue: 1,
+                        getter: () => settings.RangeEnd,
+                        setter: SetHeightmapValue<float?>(value => settings.RangeEnd = value));
+                    group.AddValueNullable<float>("op", "Opacity", "opacity",
+                        defaultValue: null, minValue: 0, maxValue: 1,
+                        getter: () => settings.Threshold,
+                        setter: SetHeightmapValue<float?>(value => settings.Threshold = value));
+                }
+
+                bc.AddGroup("hl", "Height Layer Settings", "height layer settings",
+                    hl  => {
+                        var baseNoise = BetterContinents.Settings.BaseHeightNoise;
+                        hl.AddValue<int>("n", "Number of Layers", "set number of layers",
+                            defaultValue: 1, minValue: 1, maxValue: 5,
+                            getter: () => baseNoise.NoiseLayers.Count,
+                            setter: SetHeightmapValue<int>(val => baseNoise.SetNoiseLayerCount(val)));
+
+                        for (int i = 0; i < baseNoise.NoiseLayers.Count; i++)
                         {
-                            BetterContinents.Settings.DisableSpawnmap();
-                            Console.instance.Print($"<color=orange>Spawnmap disabled!</color>");
-                            Console.instance.Print($"<color=orange>INFO: Use 'bc regenloc' to update the location spawns in the world</color>");
+                            int index = i;
+                            var noiseLayer = baseNoise.NoiseLayers[index];
+                            hl.AddGroup(index.ToString(),  $"layer {index}", $"layer {index} settings", l => {
+                                l.AddGroup("n", "Noise", $"layer {index} noise settings", nm 
+                                    => AddNoiseCommands(nm, noiseLayer.noiseSettings));
+                                l.AddGroup("nw", "Noise Warp", $"layer {index} noise warp settings", nm => {
+                                    nm.AddValue<bool>("on", "Enabled", $"layer {index} noise warp enabled",
+                                        defaultValue: false,
+                                        setter: SetHeightmapValue<bool>(value => {
+                                            if(value && noiseLayer.noiseWarpSettings == null)
+                                                noiseLayer.noiseWarpSettings = NoiseStackSettings.NoiseSettings.DefaultWarp();
+                                            else if (!value)
+                                                noiseLayer.noiseWarpSettings = null;
+                                        }),
+                                        getter: () => noiseLayer.noiseWarpSettings != null);
+                                    if (noiseLayer.noiseWarpSettings != null)
+                                    {
+                                        AddNoiseCommands(nm, noiseLayer.noiseWarpSettings, isWarp: true);
+                                    }
+                                });
+                                l.AddValue<int>(null, $"Noise layer {index} preview", $"Noise layer {index} preview")
+                                    .CustomDrawer(_ => DrawNoisePreview(index));
+
+                                if (index > 0)
+                                {
+                                    l.AddGroup("m", "Mask", $"layer {index} mask settings", nm =>
+                                    {
+                                        nm.AddValue<bool>("on", "Enabled", $"layer {index} mask enabled",
+                                            defaultValue: false,
+                                            setter: SetHeightmapValue<bool>(value =>
+                                            {
+                                                if (value && noiseLayer.maskSettings == null)
+                                                    noiseLayer.maskSettings =
+                                                        NoiseStackSettings.NoiseSettings.Default();
+                                                else if (!value)
+                                                    noiseLayer.maskSettings = noiseLayer.maskWarpSettings = null;
+                                            }),
+                                            getter: () => noiseLayer.maskSettings != null);
+                                        if (noiseLayer.maskSettings != null)
+                                        {
+                                            AddNoiseCommands(nm, noiseLayer.maskSettings);
+                                        }
+                                    });
+                                    if (noiseLayer.maskSettings != null)
+                                    {
+                                        l.AddGroup("mw", "Mask", $"layer {index} mask warp settings", nm =>
+                                        {
+                                            nm.AddValue<bool>("on", "Enabled", $"layer {index} mask warp enabled",
+                                                defaultValue: false,
+                                                setter: SetHeightmapValue<bool>(value =>
+                                                {
+                                                    if (value && noiseLayer.maskWarpSettings == null)
+                                                        noiseLayer.maskWarpSettings =
+                                                            NoiseStackSettings.NoiseSettings.DefaultWarp();
+                                                    else if (!value)
+                                                        noiseLayer.maskWarpSettings = null;
+                                                }),
+                                                getter: () => noiseLayer.maskWarpSettings != null);
+                                            if (noiseLayer.maskWarpSettings != null)
+                                            {
+                                                AddNoiseCommands(nm, noiseLayer.maskWarpSettings, isWarp: true);
+                                            }
+                                        });
+                                        l.AddValue<int>(null, $"Mask layer {index} preview",
+                                                $"Mask layer {index} preview")
+                                            .CustomDrawer(_ => DrawMaskPreview(index));
+                                    }
+                                }
+                            });
                         }
-                        else if (!File.Exists(BetterContinents.CleanPath(args)))
-                            Console.instance.Print($"<color=red>ERROR: {args} doesn't exist</color>");
-                        else
-                        {
-                            BetterContinents.Settings.SetSpawnmapPath(args);
-                            Console.instance.Print($"<color=orange>INFO: Use 'bc regenloc' to update the location spawns in the world</color>");
-                        }                    
+                        
+                        hl.AddValue<int>(null, $"Final preview", "preview of final heightmap")
+                            .CustomDrawer(_ => DrawNoisePreview(baseNoise.NoiseLayers.Count));
                     });
-                });
-                command.AddSubcommand("fo", "forest settings, get more info with 'bc param fo help'", subcmdConfig: subcmd =>
-                {
-                    AddHeightmapSubcommand(subcmd, "sc", "forest scale", "(between 0 and 1)", args => BetterContinents.Settings.ForestScaleFactor = float.Parse(args));
-                    AddHeightmapSubcommand(subcmd, "am", "forest amount", "(between 0 and 1)", args => BetterContinents.Settings.ForestAmount = float.Parse(args));
-                    AddHeightmapSubcommand(subcmd, "ffo", "forest factor override all trees", "(0 to disable, 1 to enable)", args =>
-                    {
-                        BetterContinents.Settings.ForestFactorOverrideAllTrees = int.Parse(args) != 0;
-                        Console.instance.Print("<color=orange>NOTE: You need to reload the world to apply this change to the forest factor override!</color>");
-                    });
-                    AddHeightmapSubcommand(subcmd, "fn", "set forestmap filename", "(full path including filename, or nothing to disable)", args =>
-                    {
-                        if(string.IsNullOrEmpty(args))
-                        {
-                            BetterContinents.Settings.DisableForestmap();
-                            Console.instance.Print($"<color=orange>Forestmap disabled!</color>");
-                        }
-                        else if (!File.Exists(BetterContinents.CleanPath(args)))
-                            Console.instance.Print($"<color=red>ERROR: {args} doesn't exist</color>");
-                        else
-                            BetterContinents.Settings.SetForestmapPath(args);
-                    });
-                    AddHeightmapSubcommand(subcmd, "mu", "forestmap multiply", "(between 0 and 1)", args =>
-                    {
-                        BetterContinents.Settings.ForestmapMultiply = float.Parse(args);
-                    });
-                    AddHeightmapSubcommand(subcmd, "ad", "forestmap add", "(between 0 and 1)", args =>
-                    {
-                        BetterContinents.Settings.ForestmapAdd = float.Parse(args);
-                    });
-                });
-                command.AddSubcommand("ri", "ridge settings, get more info with 'bc param ri help'", subcmdConfig: subcmd =>
-                {
-                    AddHeightmapSubcommand(subcmd, "mh", "ridges max height", "(between 0 and 1)", args =>
-                    {
-                        BetterContinents.Settings.MaxRidgeHeight = float.Parse(args);
-                    });
-                    AddHeightmapSubcommand(subcmd, "si", "ridge size", "(between 0 and 1)", args => BetterContinents.Settings.RidgeSize = float.Parse(args));
-                    AddHeightmapSubcommand(subcmd, "bl", "ridge blend", "(between 0 and 1)", args => BetterContinents.Settings.RidgeBlend = float.Parse(args));
-                    AddHeightmapSubcommand(subcmd, "am", "ridge amount", "(between 0 and 1)", args => BetterContinents.Settings.RidgeAmount = float.Parse(args));
-                });
-                command.AddSubcommand("st", "start position settings, get more info with 'bc param st help'", subcmdConfig: subcmd =>
-                {
-                    subcmd.AddSubcommand("os", "override start position", "(0 to disable, 1 to enable)", args =>
-                    {
-                        BetterContinents.Settings.OverrideStartPosition = int.Parse(args) != 0;
-                        Console.instance.Print($"<color=orange>INFO: Use 'bc regenloc' to update the location spawns in the world (including the start location)</color>");
-                    });
-                    subcmd.AddSubcommand("x", "start position x", "(between -10500 and 10500)", args =>
-                    {
-                        BetterContinents.Settings.StartPositionX = float.Parse(args);
-                        Console.instance.Print($"<color=orange>INFO: Use 'bc regenloc' to update the location spawns in the world (including the start location)</color>");
-                    });
-                    subcmd.AddSubcommand("y", "start position y", "(between -10500 and 10500)", args =>
-                    {
-                        BetterContinents.Settings.StartPositionY = float.Parse(args);
-                        Console.instance.Print($"<color=orange>INFO: Use 'bc regenloc' to update the location spawns in the world (including the start location)</color>");
-                    });
-                });
+                
+                // AddHeightmapSubcommand(command, "num", "height noise layer count", "(count from 0 to 4)", args => BetterContinents.Settings.BaseHeightNoise.SetNoiseLayerCount(int.Parse(args)));
+                // for (int i = 0; i < 4; i++)
+                // {
+                //     int index = i;
+                //     command.AddSubcommand(index.ToString(), $"height layer {index}", subcmdConfig: subcmdLayer =>
+                //     {
+                //         subcmdLayer.AddSubcommand("n", $"height layer {index} noise", 
+                //             subcmdConfig: subcmdLayerPart => AddNoiseCommands(
+                //                 (cmd, desc, args, action, getValue) => AddHeightmapSubcommand(subcmdLayerPart, cmd, desc, args, action, getValue),
+                //                 () => BetterContinents.Settings.BaseHeightNoise.NoiseLayers[index].noiseSettings));
+                //         subcmdLayer.AddSubcommand("nw", $"height layer {index} noise domain warp", 
+                //             subcmdConfig: subcmdLayerPart =>
+                //             {
+                //                 AddHeightmapSubcommand(subcmdLayerPart, "on", $"enable height layer {index} noise domain warp", "", 
+                //                     _ => BetterContinents.Settings.BaseHeightNoise.NoiseLayers[index].noiseWarpSettings ??= NoiseStackSettings.NoiseSettings.Default());
+                //                 AddHeightmapSubcommand(subcmdLayerPart, "off", $"disable height layer {index} noise domain warp", "", 
+                //                     _ => BetterContinents.Settings.BaseHeightNoise.NoiseLayers[index].noiseWarpSettings = null);
+                //                 AddNoiseCommands(
+                //                     (cmd, desc, args, action, getValue) =>
+                //                         AddHeightmapSubcommand(subcmdLayerPart, cmd, desc, args, action,
+                //                             getValue),
+                //                     () => BetterContinents.Settings.BaseHeightNoise.NoiseLayers[index]
+                //                         .noiseWarpSettings);
+                //             });
+                //         subcmdLayer.AddSubcommand("m", $"height layer {index} mask", 
+                //             subcmdConfig: subcmdLayerPart =>
+                //             {
+                //                 AddHeightmapSubcommand(subcmdLayerPart, "on", $"enable height layer {index} mask", "", 
+                //                     _ => BetterContinents.Settings.BaseHeightNoise.NoiseLayers[index].maskSettings ??= NoiseStackSettings.NoiseSettings.Default());
+                //                 AddHeightmapSubcommand(subcmdLayerPart, "off", $"disable height layer {index} mask", "", 
+                //                     _ =>
+                //                     {
+                //                         BetterContinents.Settings.BaseHeightNoise.NoiseLayers[index].maskSettings = null;
+                //                         BetterContinents.Settings.BaseHeightNoise.NoiseLayers[index].maskWarpSettings = null;
+                //                     });
+                //                 AddNoiseCommands(
+                //                     (cmd, desc, args, action, getValue) =>
+                //                         AddHeightmapSubcommand(subcmdLayerPart, cmd, desc, args, action,
+                //                             getValue),
+                //                     () => BetterContinents.Settings.BaseHeightNoise.NoiseLayers[index].maskSettings);
+                //             });
+                //         subcmdLayer.AddSubcommand("mw", $"height layer {index} mask domain warp", 
+                //             subcmdConfig: subcmdLayerPart =>
+                //             {
+                //                 AddHeightmapSubcommand(subcmdLayerPart, "on", $"enable height layer {index} mask domain warp", "", 
+                //                     _ => BetterContinents.Settings.BaseHeightNoise.NoiseLayers[index].maskWarpSettings ??= NoiseStackSettings.NoiseSettings.Default());
+                //                 AddHeightmapSubcommand(subcmdLayerPart, "off", $"disable height layer {index} mask domain warp", "", 
+                //                     _ => BetterContinents.Settings.BaseHeightNoise.NoiseLayers[index].maskWarpSettings = null);
+                //                 AddNoiseCommands(
+                //                     (cmd, desc, args, action, getValue) =>
+                //                         AddHeightmapSubcommand(subcmdLayerPart, cmd, desc, args, action,
+                //                             getValue),
+                //                     () => BetterContinents.Settings.BaseHeightNoise.NoiseLayers[index].maskWarpSettings);
+                //             });
+                //     });
+                // }
             });
         }
-
+        
         public static void RunConsoleCommand(string text)
         {
             rootCommand.Run(text);
         }
 
-        private static Command rootCommand = new Command("bc", "", "", null, null);
-
-        public static void AddCommand(string cmd, string desc, Action<string> action = null, Action<Command> configCmd = null, Func<object> getCurrentValue = null)
-        {
-            rootCommand.AddSubcommand(cmd, desc, action, configCmd, getCurrentValue);
-        }
-
-        public static void AddCommand(string cmd, string desc, string args, Action<string> action, Action<Command> configCmd = null, Func<object> getCurrentValue = null)
-        {
-            rootCommand.AddSubcommand(cmd, desc, args, action, configCmd, getCurrentValue);
-        }
-
-        public class Command
-        {
-            public string cmd;
-            public string desc;
-            public string args;
-            public Action<string> action;
-            public Func<object> getCurrentValue;
-            public List<Command> subcommands = new List<Command>();
-            public Command parent;
-
-            public Command(string cmd, string desc, string args, Action<string> action, Func<object> getCurrentValue)
-            {
-                this.cmd = cmd;
-                this.desc = desc;
-                this.args = args;
-                this.action = action;
-                this.getCurrentValue = getCurrentValue;
-                if (cmd != "help")
-                {
-                    AddSubcommand("help", "get help with this command", _ => this.ShowSubcommandHelp());
-                }
-            }
-
-            public Command(string cmd, string desc, Action<string> action, Func<string> getCurrentValue) : this(cmd, desc, null, action, getCurrentValue) { }
-
-            public bool Run(string text)
-            {
-                if (subcommands.Any() && text.StartsWith(cmd + " "))
-                {
-                    if(subcommands.FirstOrDefault(s => s.Run(text.Substring(cmd.Length).Trim())) != null)
-                    {
-                        return true;
-                    }
-                }
-                if (action != null && (text == cmd || args != null && text.StartsWith(cmd + " ")))
-                {
-                    try
-                    {
-                        action(text.Substring(cmd.Length).Trim());
-                    }
-                    catch (Exception ex)
-                    {
-                        Console.instance.Print($"{cmd} failed: {ex.Message}");
-                    }
-
-                    return true;
-                }
-                else if (action == null && text == cmd)
-                {
-                    ShowSubcommandHelp();
-                    
-                    return true;
-                }
-
-                return false;
-            }
-
-            public void AddSubcommand(string cmd, string desc, Action<string> action = null,
-                Action<Command> subcmdConfig = null, Func<object> getCurrentValue = null) =>
-                AddSubcommand(cmd, desc, null, action, subcmdConfig, getCurrentValue);
-
-            public void AddSubcommand(string cmd, string desc, string args, Action<string> action = null,
-                Action<Command> subcmdConfig = null, Func<object> getCurrentValue = null)
-            {
-                var newSubCmd = new Command(cmd, desc, args, action, getCurrentValue);
-                newSubCmd.parent = this;
-                subcmdConfig?.Invoke(newSubCmd);
-                subcommands.Add(newSubCmd);
-            }
-            
-            public void ShowHelp()
-            {
-                var cmdStack = new List<string>();
-                var curr = this;
-                while (curr != null)
-                {
-                    cmdStack.Insert(0, curr.cmd); 
-                    curr = curr.parent;
-                }
-
-                var fullCmd = string.Join(" ", cmdStack);
-                    
-                Console.instance.Print($"    <size=18><b><color=cyan>{fullCmd}</color></b> <color=orange>{args ?? string.Empty}</color> -- <b><color=#55ff55ff>{getCurrentValue?.Invoke() ?? string.Empty}</color></b> -- </size><size=15>{desc}</size>");
-
-                // if (getCurrentValue != null)
-                // {
-                //     Console.instance.Print($"        <size=15><b><color=#55ff55ff>{getCurrentValue()}</color></b></size>");
-                // }
-            }
-
-            public void ShowSubcommandHelp()
-            {
-                ShowHelp();
-                foreach (var subcmd in subcommands)
-                {
-                    subcmd.ShowHelp();
-                }
-            }
-        }
-
         public static T GetDelegate<T>(Type type, string method) where T : Delegate 
             => AccessTools.MethodDelegate<T>(AccessTools.Method(type, method));
+        
+        private static Action<string> HeightmapCommand(Action<string> command) =>
+            value =>
+            {
+                GameUtils.BeginTerrainChanges();
+                command(value);
+                BetterContinents.WorldGeneratorPatch.ApplyNoiseSettings();
+                noisePreviewTextures = null;
+                maskPreviewTextures = null;
+                GameUtils.EndTerrainChanges();
+            };
+        
+        private static Action<T> SetHeightmapValue<T>(Action<T> setValue) =>
+            value =>
+            {
+                GameUtils.BeginTerrainChanges();
+                setValue(value);
+                BetterContinents.WorldGeneratorPatch.ApplyNoiseSettings();
+                noisePreviewTextures = null;
+                maskPreviewTextures = null;
+                GameUtils.EndTerrainChanges();
+            };
+        
+        private static readonly Command rootCommand;
+        private static List<Texture> noisePreviewTextures = null;
+        private static List<Texture> maskPreviewTextures = null;
+        private static List<bool> noisePreviewExpanded = new List<bool>();
+
+        private const int NoisePreviewSize = 512;
+        private static (Texture noise, Texture mask) GetPreviewTextures(int layerIndex)
+        {
+            if (noisePreviewTextures == null)
+            {
+                var noise = BetterContinents.WorldGeneratorPatch.BaseHeightNoise;
+                noisePreviewTextures = new List<Texture>();
+                maskPreviewTextures = new List<Texture>();
+                for (int i = 0; i < noise.layers.Count; i++)
+                {
+                    noisePreviewTextures.Add(CreateNoisePreview((x, y) => noise.layers[i].noise.GetNoise(x, y),
+                        NoisePreviewSize));
+                    maskPreviewTextures.Add(noise.layers[i].mask != null
+                        ? CreateNoisePreview((x, y) => noise.layers[i].mask.Value.GetNoise(x, y), NoisePreviewSize)
+                        : null);
+                }
+
+                noisePreviewTextures.Add(CreateNoisePreview((x, y) => noise.Apply(x, y), NoisePreviewSize));
+                maskPreviewTextures.Add(null);
+            }
+
+            return (noisePreviewTextures[layerIndex], maskPreviewTextures[layerIndex]);
+        }
+
+        private static Texture CreateNoisePreview(Func<float, float, float> noiseFn, int size = 128)
+        {
+            var tex = new Texture2D(size, size);
+            var pixels = new Color32[size * size];
+            GameUtils.SimpleParallelFor(4, 0, size, y =>
+            {
+                float yp = 2f * (y / (float) size - 0.5f) * BetterContinents.WorldSize;
+                for (int x = 0; x < size; ++x)
+                {
+                    float xp = 2f * (x / (float) size - 0.5f) * BetterContinents.WorldSize;
+                    byte val = (byte) Mathf.Clamp((int) (noiseFn(xp, yp) * 255f), 0, 255);
+                    pixels[y * size + x] = new Color32(val, val, val, byte.MaxValue);
+                }
+            });
+
+            tex.SetPixels32(pixels);
+            tex.Apply(false);
+            return tex;
+        }
+        
+        private static void DrawNoisePreview(int i)
+        {
+            var (noiseTexture, maskTexture) = GetPreviewTextures(i);
+
+            noisePreviewExpanded.Resize(Mathf.Max(noisePreviewExpanded.Count, noisePreviewTextures.Count));
+            noisePreviewExpanded[i] = GUILayout.Toggle(noisePreviewExpanded[i], i == noisePreviewTextures.Count - 1 ? "Preview Final" : $"Preview Layer {i} Noise");
+            if (noisePreviewExpanded[i])
+            {
+                GUILayout.Box(noiseTexture);
+            }
+        }
+        
+        private static void DrawMaskPreview(int i)
+        {
+            var (noiseTexture, maskTexture) = GetPreviewTextures(i);
+            noisePreviewExpanded.Resize(Mathf.Max(noisePreviewExpanded.Count, maskPreviewTextures.Count));
+            noisePreviewExpanded[i] = GUILayout.Toggle(noisePreviewExpanded[i], i == maskPreviewTextures.Count - 1 ? "Preview Final Mask" : $"Preview Layer {i} Mask");
+            if (noisePreviewExpanded[i])
+            {
+                GUILayout.Box(maskTexture);
+            }
+        }
     }
 }

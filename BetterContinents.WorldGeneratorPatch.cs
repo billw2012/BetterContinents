@@ -1,5 +1,9 @@
-﻿using System.Diagnostics;
+﻿using System.Collections.Generic;
+using System.Diagnostics;
 using System.Linq;
+using System.Reflection;
+using System.Threading;
+using System.Threading.Tasks;
 using HarmonyLib;
 using UnityEngine;
 using UnityEngine.Rendering;
@@ -59,11 +63,11 @@ namespace BetterContinents
                 }
             }
 
-            private static NoiseStack baseHeightNoise;
+            public static NoiseStack BaseHeightNoise;
 
             public static void ApplyNoiseSettings()
             {
-                baseHeightNoise = new NoiseStack(Settings.BaseHeightNoise);
+                BaseHeightNoise = new NoiseStack(currentSeed, Settings.BaseHeightNoise);
             }
 
             // wx, wy are [-10500, 10500]
@@ -319,9 +323,10 @@ namespace BetterContinents
                 float mapX = NormalizedX(wx);
                 float mapY = NormalizedY(wy);
 
-                float baseHeight = baseHeightNoise.Apply(wx, wy, 0f);
+                float baseHeight = BaseHeightNoise.Apply(wx, wy, 0f);
                 
                 float finalHeight = Settings.ApplyHeightmap(mapX, mapY, baseHeight);
+                finalHeight -= 0.15f; // Resulting in about 30% water coverage by default
                 finalHeight += Settings.SeaLevelAdjustment;
 
                 // Edge of the world
@@ -460,7 +465,6 @@ namespace BetterContinents
     }
 
     // None of this is faster in testing
-    #if false
     [HarmonyPatch(typeof(HeightmapBuilder))]
     public class HeightmapBuilderPatch
     {
@@ -601,7 +605,7 @@ namespace BetterContinents
 			    data.m_baseHeights.Add(0f);
 		    }
 
-            GameUtils.SimpleParallelFor(2, 0, num, j => 
+            GameUtils.SimpleParallelFor(4, 0, num, j => 
                 //for (int j = 0; j < num; j++)
             {
                 float wy = vector.z + (float) j * data.m_scale;
@@ -672,5 +676,4 @@ namespace BetterContinents
 		    }
 	    }
     }
-    #endif
 }

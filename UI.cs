@@ -46,9 +46,14 @@ namespace BetterContinents
                     {
                         UI.Text("Better Continents Debug Mode Enabled!", 10, 10, Color.red);
 
-                        if (Menu.IsVisible())
+                        if (Menu.IsVisible() || Minimap.instance.m_mode == Minimap.MapMode.Large)
                         {
                             DoDebugMenu();
+                        }
+                        
+                        if (WindowVisible)
+                        {
+                            DebugUtils.Command.DrawSettingsWindow();
                         }
                     }
                 });
@@ -73,14 +78,16 @@ namespace BetterContinents
 
         private static void DoDebugMenu()
         {
-            //UI.Text("Better Continents Debug Menu", ButtonX, y += ButtonHeight);
+            if (Event.current.type is EventType.KeyUp 
+                && Event.current.modifiers is (EventModifiers.Alt | EventModifiers.FunctionKey)
+                && Event.current.keyCode is KeyCode.F8)
+            {
+                WindowVisible = !WindowVisible;
+                Event.current.Use();
+            }
             if (UI.Button("Better Continents", Spacing, 150))
             {
                 WindowVisible = !WindowVisible;
-            }
-            if (WindowVisible)
-            {
-                windowRect = GUILayout.Window(ModInfo.Name.GetHashCode(), windowRect, Window, "Better Continents", GUILayout.MinWidth(250));
             }
         }
         
@@ -144,13 +151,15 @@ namespace BetterContinents
 
         public static void OnGUI()
         {
-            foreach (var callback in UICallbacks.Values)
+            foreach (var callback in UICallbacks.Values.ToList())
             {
                 callback();
             }
         }
 
         public static void Add(string key, Action action) => UICallbacks[key] = action;
+
+        public static bool Exists(string key) => UICallbacks.ContainsKey(key);
         
         public static void Remove(string key) => UICallbacks.Remove(key);
         

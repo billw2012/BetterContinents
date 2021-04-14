@@ -154,8 +154,14 @@ namespace BetterContinents
 
         public static void Save(BetterContinents.BetterContinentsSettings settings, string name)
         {
-            settings.Save(Path.Combine(PresetsDir, name + ".BetterContinents"));
-            GameUtils.SaveMinimap(Path.Combine(PresetsDir, name + ".png"), 256);
+            var path = Path.Combine(PresetsDir, name + ".BetterContinents");
+            if (File.Exists(path))
+                File.Move(path, path + ".old-" + DateTime.Now.ToString("yyyy-dd-M-HH-mm-ss"));
+            settings.Save(path);
+            var pngPath = Path.Combine(PresetsDir, name + ".png");
+            if (File.Exists(pngPath))
+                File.Move(pngPath, pngPath + ".old-" + DateTime.Now.ToString("yyyy-dd-M-HH-mm-ss"));
+            GameUtils.SaveMinimap(pngPath, 256);
         }
     }
 }

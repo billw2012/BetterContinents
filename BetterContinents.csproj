@@ -13,7 +13,8 @@
     <TargetFrameworkVersion>v4.7.2</TargetFrameworkVersion>
     <FileAlignment>512</FileAlignment>
     <DisableFody Condition="'$(Configuration)' == 'Debug'">true</DisableFody>
-    <LangVersion>8</LangVersion>
+    <LangVersion>9</LangVersion>
+    <Nullable>disable</Nullable>
   </PropertyGroup>
   <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Debug|AnyCPU' ">
     <PlatformTarget>AnyCPU</PlatformTarget>
@@ -241,6 +242,7 @@
     <Compile Include="Color32Comparer.cs" />
     <Compile Include="ConfigHelpers.cs" />
     <Compile Include="ConfigurationManagerAttributes.cs" />
+    <Compile Include="DebugUtils.Command.cs" />
     <Compile Include="DebugUtils.cs" />
     <Compile Include="ExtensionMethods.cs" />
     <Compile Include="FastNoiseLite\FastNoiseLite.cs" />
@@ -255,6 +257,7 @@
     <Compile Include="Presets.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
     <Compile Include="UI.cs" />
+    <Compile Include="UI\ComboBox.cs" />
   </ItemGroup>
   <ItemGroup>
     <None Include="packages.config" />

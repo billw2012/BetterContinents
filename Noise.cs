@@ -10,6 +10,19 @@ namespace BetterContinents
     {
         public class NoiseSettings
         {
+            public static readonly FastNoiseLite.FractalType[] WarpFractalTypes = {
+                FastNoiseLite.FractalType.None,
+                FastNoiseLite.FractalType.DomainWarpIndependent,
+                FastNoiseLite.FractalType.DomainWarpProgressive,
+            };
+            
+            public static readonly FastNoiseLite.FractalType[] NonFractalTypes = {
+                FastNoiseLite.FractalType.None,
+                FastNoiseLite.FractalType.FBm,
+                FastNoiseLite.FractalType.Ridged,
+                FastNoiseLite.FractalType.PingPong,
+            };
+            
             // Basic
             public FastNoiseLite.NoiseType NoiseType; // = FastNoiseLite.NoiseType.OpenSimplex2
             public float Frequency; // = 0.0005f
@@ -34,8 +47,8 @@ namespace BetterContinents
             // Filters
             public bool Invert;
             
-            public float? SmoothStepStart;
-            public float? SmoothStepEnd;
+            public float? SmoothThresholdStart;
+            public float? SmoothThresholdEnd;
             
             public float? Threshold;
             
@@ -55,6 +68,17 @@ namespace BetterContinents
                     Frequency = 0.0005f,
                     FractalType = FastNoiseLite.FractalType.FBm,
                     FractalOctaves = 4,
+                    FractalLacunarity = 2,
+                    FractalGain = 0.5f,
+                    FractalWeightedStrength = 0,
+                };
+            public static NoiseSettings DefaultWarp() =>
+                new NoiseSettings
+                {
+                    NoiseType = FastNoiseLite.NoiseType.OpenSimplex2,
+                    Frequency = 0.0005f,
+                    FractalType = FastNoiseLite.FractalType.DomainWarpIndependent,
+                    FractalOctaves = 1,
                     FractalLacunarity = 2,
                     FractalGain = 0.5f,
                     FractalWeightedStrength = 0,
@@ -82,8 +106,8 @@ namespace BetterContinents
                 pkg.Write(DomainWarpAmp);
                 
                 pkg.Write(Invert);
-                WriteOptionalSingle(SmoothStepStart);
-                WriteOptionalSingle(SmoothStepEnd);
+                WriteOptionalSingle(SmoothThresholdStart);
+                WriteOptionalSingle(SmoothThresholdEnd);
                 WriteOptionalSingle(Threshold);
                 WriteOptionalSingle(RangeStart);
                 WriteOptionalSingle(RangeEnd);
@@ -122,8 +146,8 @@ namespace BetterContinents
                 settings.DomainWarpAmp = pkg.ReadSingle();
 
                 settings.Invert = pkg.ReadBool();
-                settings.SmoothStepStart = ReadOptionalSingle();
-                settings.SmoothStepEnd = ReadOptionalSingle();
+                settings.SmoothThresholdStart = ReadOptionalSingle();
+                settings.SmoothThresholdEnd = ReadOptionalSingle();
                 settings.Threshold = ReadOptionalSingle();
                 settings.RangeStart = ReadOptionalSingle();
                 settings.RangeEnd = ReadOptionalSingle();
@@ -134,9 +158,9 @@ namespace BetterContinents
                 return settings;
             }
             
-            public FastNoiseLite CreateNoise()
+            public FastNoiseLite CreateNoise(int seed)
             {
-                var noise = new FastNoiseLite();
+                var noise = new FastNoiseLite(seed);
                 noise.SetNoiseType(NoiseType);
                 noise.SetFrequency(Frequency / BetterContinents.Settings.GlobalScale);
                 noise.SetFractalType(FractalType);
@@ -162,9 +186,9 @@ namespace BetterContinents
                 output($"cell. dist. fn. {CellularDistanceFunction}, cell. ret. type {CellularReturnType}, cell jitt. {CellularJitter}");
                 output($"warp type {DomainWarpType}, warp amp {DomainWarpAmp}");
                 output($"invert {Invert}");
-                if (SmoothStepStart != null && SmoothStepEnd != null)
+                if (SmoothThresholdStart != null && SmoothThresholdEnd != null)
                 {
-                    output($"smooth step {SmoothStepStart} - {SmoothStepEnd}");
+                    output($"smooth step {SmoothThresholdStart} - {SmoothThresholdEnd}");
                 }
                 if (Threshold != null)
                 {
@@ -242,52 +266,53 @@ namespace BetterContinents
             }
         }
 
-        public NoiseSettings BaseLayer = NoiseSettings.Default();
-        public List<NoiseLayer> Layers = new List<NoiseLayer>();
+        public readonly List<NoiseLayer> NoiseLayers = new List<NoiseLayer>();
+
+        public static NoiseStackSettings Default()
+        {
+            var val = new NoiseStackSettings();
+            val.NoiseLayers.Add(new NoiseLayer());
+            return val;
+        }
 
         public void SetNoiseLayerCount(int count)
         {
-            while (Layers.Count > count && Layers.Count > 0)
+            count = Mathf.Max(1, count);
+            while (NoiseLayers.Count > count && NoiseLayers.Count > 0)
             {
-                Layers.RemoveAt(Layers.Count - 1);
+                NoiseLayers.RemoveAt(NoiseLayers.Count - 1);
             }
-            while (Layers.Count < count)
+            while (NoiseLayers.Count < count)
             {
-                Layers.Add(new NoiseLayer());
+                NoiseLayers.Add(new NoiseLayer());
             }
         }
 
         public void Dump(Action<string> output)
         {
-            BaseLayer.Dump(output);
-            for (int i = 0; i < Layers.Count; i++)
+            for (int i = 0; i < NoiseLayers.Count; i++)
             {
                 output($"Layer {i + 1}:");
-                Layers[i].Dump(output);
+                NoiseLayers[i].Dump(output);
             }
         }
 
         public void Serialize(ZPackage pkg)
         {
-            BaseLayer.Serialize(pkg);
-            pkg.Write(Layers.Count);
-            for (int i = 0; i < Layers.Count; i++)
+            pkg.Write(NoiseLayers.Count);
+            for (int i = 0; i < NoiseLayers.Count; i++)
             {
-                Layers[i].Serialize(pkg);
+                NoiseLayers[i].Serialize(pkg);
             }
         }
 
         public static NoiseStackSettings Deserialize(ZPackage pkg)
         {
             var stack = new NoiseStackSettings();
-            stack.BaseLayer = NoiseSettings.Deserialize(pkg);
             int noiseLayerCount = pkg.ReadInt();
-            if (noiseLayerCount > 0)
+            for (int i = 0; i < noiseLayerCount; i++)
             {
-                for (int i = 0; i < noiseLayerCount; i++)
-                {
-                    stack.Layers.Add(NoiseLayer.Deserialize(pkg));
-                }
+                stack.NoiseLayers.Add(NoiseLayer.Deserialize(pkg));
             }
             return stack;
         }
@@ -308,25 +333,31 @@ namespace BetterContinents
         
         public bool IsValid => noise != null;
         
-        public WarpedNoise(NoiseStackSettings.NoiseSettings settings, NoiseStackSettings.NoiseSettings warpSettings = null)
+        public WarpedNoise(int seed, NoiseStackSettings.NoiseSettings settings, NoiseStackSettings.NoiseSettings warpSettings = null)
         {
             this.settings = settings;
     
-            noise = settings.CreateNoise();
-            warp = warpSettings?.CreateNoise();
+            noise = settings.CreateNoise(seed);
+            warp = warpSettings?.CreateNoise(seed + 127);
     
             min = float.MaxValue;
             max = float.MinValue;
     
             var st = new Stopwatch();
             st.Start();
-            for (int i = 0; i < 10000; ++i)
+            const int RangeCheckSize = 100;
+            for (int y = 0; y < RangeCheckSize; ++y)
             {
-                float height = noise.GetNoise(UnityEngine.Random.Range(-BetterContinents.WorldSize, BetterContinents.WorldSize), UnityEngine.Random.Range(-BetterContinents.WorldSize, BetterContinents.WorldSize));
-                min = Mathf.Min(min, height);
-                max = Mathf.Max(max, height);
+                float yp = 2f * (y / (float) RangeCheckSize - 0.5f) * BetterContinents.WorldSize;
+                for (int x = 0; x < RangeCheckSize; ++x)
+                {
+                    float xp = 2f * (x / (float) RangeCheckSize - 0.5f) * BetterContinents.WorldSize;
+                    float height = noise.GetNoise(xp, yp);
+                    min = Mathf.Min(min, height);
+                    max = Mathf.Max(max, height);
+                }
             }
-            BetterContinents.Log($"{10000 / st.ElapsedMilliseconds} samples per ms, range [{min}, {max}]");
+            BetterContinents.Log($"{RangeCheckSize * RangeCheckSize / st.ElapsedMilliseconds} samples per ms, range [{min}, {max}]");
             add = -min;
             mul = 1 / (max - min);
         }
@@ -343,9 +374,10 @@ namespace BetterContinents
             {
                 normalizedNoise = 1 - normalizedNoise;
             }
-            if (settings.SmoothStepStart != null && settings.SmoothStepEnd != null)
+            if (settings.SmoothThresholdStart != null && settings.SmoothThresholdEnd != null)
             {
-                normalizedNoise = Mathf.SmoothStep(settings.SmoothStepStart.Value, settings.SmoothStepEnd.Value, normalizedNoise);
+                //normalizedNoise = Mathf.SmoothStep(settings.SmoothStepStart.Value, settings.SmoothStepEnd.Value, normalizedNoise);
+                normalizedNoise = Mathf.InverseLerp(settings.SmoothThresholdStart.Value, settings.SmoothThresholdEnd.Value, normalizedNoise);
             }
             normalizedNoise = Mathf.Lerp(settings.RangeStart ?? 0, settings.RangeEnd ?? 1, normalizedNoise);
             if (settings.Threshold != null)
@@ -360,20 +392,20 @@ namespace BetterContinents
     
     public struct NoiseLayer
     {
-        private WarpedNoise noise;
-        private WarpedNoise? mask;
+        public WarpedNoise noise;
+        public WarpedNoise? mask;
     
-        public NoiseLayer(NoiseStackSettings.NoiseSettings layerSettings)
+        public NoiseLayer(int seed, NoiseStackSettings.NoiseSettings layerSettings)
         {
-            noise = new WarpedNoise(layerSettings);
+            noise = new WarpedNoise(seed, layerSettings);
             mask = null;
         }
         
-        public NoiseLayer(NoiseStackSettings.NoiseLayer noiseLayerSettings)
+        public NoiseLayer(int seed, NoiseStackSettings.NoiseLayer noiseLayerSettings)
         {
-            noise = new WarpedNoise(noiseLayerSettings.noiseSettings, noiseLayerSettings.noiseWarpSettings);
+            noise = new WarpedNoise(seed, noiseLayerSettings.noiseSettings, noiseLayerSettings.noiseWarpSettings);
             mask = noiseLayerSettings.maskSettings != null
-                ? new WarpedNoise(noiseLayerSettings.maskSettings, noiseLayerSettings.maskWarpSettings) 
+                ? new WarpedNoise(seed * 107, noiseLayerSettings.maskSettings, noiseLayerSettings.maskWarpSettings) 
                 : (WarpedNoise?) null;
         }
         
@@ -388,21 +420,20 @@ namespace BetterContinents
     
     public class NoiseStack
     {
-        public NoiseLayer baseLayer;
         public List<NoiseLayer> layers = new List<NoiseLayer>();
 
-        public NoiseStack(NoiseStackSettings settings)
+        public NoiseStack(int seed, NoiseStackSettings settings)
         {
-            baseLayer = new NoiseLayer(settings.BaseLayer);
-            foreach (var layerSettings in settings.Layers)
+            for (var layerIndex = 0; layerIndex < settings.NoiseLayers.Count; layerIndex++)
             {
-                layers.Add(new NoiseLayer(layerSettings));
+                var layerSettings = settings.NoiseLayers[layerIndex];
+                layers.Add(new NoiseLayer(seed * 31 * (layerIndex + 3), layerSettings));
             }
         }
 
         public float Apply(float x, float y, float inValue = 0f)
         {
-            float newValue = baseLayer.Apply(x, y, inValue);
+            float newValue = inValue;
             foreach (var layer in layers)
             {
                 newValue = layer.Apply(x, y, newValue);
