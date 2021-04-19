@@ -18,7 +18,6 @@ namespace BetterContinents
         public static ConfigEntry<bool> ConfigEnabled;
         
         public static ConfigEntry<float> ConfigContinentSize;
-        public static ConfigEntry<float> ConfigMountainsAmount;
         public static ConfigEntry<float> ConfigSeaLevelAdjustment;
         public static ConfigEntry<bool> ConfigOceanChannelsEnabled;
         public static ConfigEntry<bool> ConfigRiversEnabled;
@@ -33,15 +32,7 @@ namespace BetterContinents
         public static ConfigEntry<float> ConfigHeightmapAdd;
         public static ConfigEntry<float> ConfigHeightmapMask;
         public static ConfigEntry<bool> ConfigHeightmapOverrideAll;
-        
-        public static ConfigEntry<FastNoiseLite.NoiseType> ConfigBaseHeightNoiseType;
-        public static ConfigEntry<float> ConfigBaseHeightFrequency;
-        public static ConfigEntry<FastNoiseLite.FractalType> ConfigBaseHeightFractalType;
-        public static ConfigEntry<int> ConfigBaseHeightFractalOctaves;
-        public static ConfigEntry<float> ConfigBaseHeightLacunarity;
-        public static ConfigEntry<float> ConfigBaseHeightFractalGain;
-        public static ConfigEntry<float> ConfigBaseHeightWeightedStrength;
-        
+
         public static ConfigEntry<string> ConfigBiomemapFile;
 
         public static ConfigEntry<string> ConfigSpawnmapFile;
@@ -49,22 +40,13 @@ namespace BetterContinents
         public static ConfigEntry<string> ConfigRoughmapFile;
         public static ConfigEntry<float> ConfigRoughmapBlend;
         
-        public static ConfigEntry<bool> ConfigUseRoughInvertedForFlat;
-        public static ConfigEntry<string> ConfigFlatmapFile;
-        public static ConfigEntry<float> ConfigFlatmapBlend;
-        
         public static ConfigEntry<float> ConfigForestScale;
         public static ConfigEntry<float> ConfigForestAmount;
         public static ConfigEntry<bool> ConfigForestFactorOverrideAllTrees;
         public static ConfigEntry<string> ConfigForestmapFile;
         public static ConfigEntry<float> ConfigForestmapMultiply;
         public static ConfigEntry<float> ConfigForestmapAdd;
-        
-        public static ConfigEntry<float> ConfigMaxRidgeHeight;
-        public static ConfigEntry<float> ConfigRidgeSize;
-        public static ConfigEntry<float> ConfigRidgeBlend;
-        public static ConfigEntry<float> ConfigRidgeAmount;
-        
+
         public static ConfigEntry<bool> ConfigOverrideStartPosition;
         public static ConfigEntry<float> ConfigStartPositionX;
         public static ConfigEntry<float> ConfigStartPositionY;
@@ -74,7 +56,6 @@ namespace BetterContinents
         
         public static ConfigEntry<bool> ConfigExperimentalMultithreadedHeightmapBuild;
         public static ConfigEntry<bool> ConfigExperimentalParallelChunksBuild;
-        
 
         public const float WorldSize = 10500f;
         private static readonly Vector2 Half = Vector2.one * 0.5f;
@@ -128,9 +109,6 @@ namespace BetterContinents
                     groupBuilder.AddValue("Continent Size")
                         .Description("Continent size")
                         .Default(0.5f).Range(0f, 1f).Bind(out ConfigContinentSize);
-                    groupBuilder.AddValue("Mountains Amount")
-                        .Description("Mountains amount")
-                        .Default(0.5f).Range(0f, 1f).Bind(out ConfigMountainsAmount);
                     groupBuilder.AddValue("Sea Level Adjustment")
                         .Description("Modify sea level, which changes the land:sea ratio")
                         .Default(0.5f).Range(0f, 1f).Bind(out ConfigSeaLevelAdjustment);
@@ -149,7 +127,7 @@ namespace BetterContinents
                 })
                 .AddGroup("BetterContinents.Project", groupBuilder => {
                     groupBuilder.AddValue("Directory")
-                        .Description("This directory will load automatically any existing map files matching the correct names, overriding specific files specified below. Filenames must match: heightmap.png, biomemap.png, spawnmap.png, roughmap.png, flatmap.png, forestmap.png.").Bind(out ConfigMapSourceDir);
+                        .Description("This directory will load automatically any existing map files matching the correct names, overriding specific files specified below. Filenames must match: heightmap.png, biomemap.png, spawnmap.png, roughmap.png, forestmap.png.").Bind(out ConfigMapSourceDir);
                 })
                 .AddGroup("BetterContinents.Heightmap", groupBuilder => {
                     groupBuilder.AddValue("Heightmap File")
@@ -170,45 +148,12 @@ namespace BetterContinents
                         .Description("All other aspects of the height calculation will be disabled, so the world will perfectly conform to your heightmap")
                         .Default(true).Bind(out ConfigHeightmapOverrideAll);
                 })
-                .AddGroup("BetterContinents.HeightBaseNoise", groupBuilder => {
-                    groupBuilder.AddValue("Base Height Noise Type")
-                        .Description("")
-                        .Default(FastNoiseLite.NoiseType.OpenSimplex2).Advanced().Bind(out ConfigBaseHeightNoiseType);
-                    groupBuilder.AddValue("Base Height Frequency")
-                        .Description("")
-                        .Default(0.0005f).Range(0.0001f, 0.01f).Advanced().Bind(out ConfigBaseHeightFrequency);
-                    groupBuilder.AddValue("Base Height Fractal Type")
-                        .Description("")
-                        .Default(FastNoiseLite.FractalType.FBm).Advanced().Bind(out ConfigBaseHeightFractalType);
-                    groupBuilder.AddValue("Base Height Fractal Octaves")
-                        .Description("")
-                        .Default(4).Range(1, 20).Advanced().Bind(out ConfigBaseHeightFractalOctaves);
-                    groupBuilder.AddValue("Base Height Lacunarity")
-                        .Description("")
-                        .Default(2f).Range(0f, 5f).Advanced().Bind(out ConfigBaseHeightLacunarity);
-                    groupBuilder.AddValue("Base Height Fractal Gain")
-                        .Description("")
-                        .Default(0.5f).Range(0f, 1f).Advanced().Bind(out ConfigBaseHeightFractalGain);
-                    groupBuilder.AddValue("Base Height Weighted Strength")
-                        .Description("")
-                        .Default(0f).Range(-10f, 10f).Advanced().Bind(out ConfigBaseHeightWeightedStrength);
-                })
                 .AddGroup("BetterContinents.Roughmap", groupBuilder => {
                     groupBuilder.AddValue("Roughmap File")
                         .Description("Path to a roughmap file to use. See the description on Nexusmods.com for the specifications (it will fail if they are not met)").Bind(out ConfigRoughmapFile);
                     groupBuilder.AddValue("Roughmap Blend")
                         .Description("How strongly to apply the roughmap file")
                         .Default(1f).Range(0f, 1f).Bind(out ConfigRoughmapBlend);
-                })
-                .AddGroup("BetterContinents.Flatmap", groupBuilder => {
-                    groupBuilder.AddValue("Use Roughmap For Flatmap")
-                        .Description("Use the flatmap as the rough map, but inverted (black rough map results in totally flat terrain)")
-                        .Default(true).Bind(out ConfigUseRoughInvertedForFlat);
-                    groupBuilder.AddValue("Flatmap File")
-                        .Description("Path to a flatmap file to use. See the description on Nexusmods.com for the specifications (it will fail if they are not met)").Bind(out ConfigFlatmapFile);
-                    groupBuilder.AddValue("Flatmap Blend")
-                        .Description("How strongly to apply the flatmap file (also applies when using Use Roughmap For Flatmap)")
-                        .Default(1f).Range(0f, 1f).Bind(out ConfigFlatmapBlend);
                 })
                 .AddGroup("BetterContinents.Biomemap", groupBuilder => {
                     groupBuilder.AddValue("Biomemap File")
@@ -236,20 +181,6 @@ namespace BetterContinents
                 .AddGroup("BetterContinents.Spawnmap", groupBuilder => {
                     groupBuilder.AddValue("Spawnmap File")
                         .Description("Path to a spawnmap file to use. See the description on Nexusmods.com for the specifications (it will fail if they are not met)").Bind(out ConfigSpawnmapFile);
-                })
-                .AddGroup("BetterContinents.Ridges", groupBuilder => {
-                    groupBuilder.AddValue("Max Ridge Height")
-                        .Description("Max height of ridge features (set this to 0 to turn OFF ridges entirely)")
-                        .Default(0.5f).Range(0f, 1f).Bind(out ConfigMaxRidgeHeight);
-                    groupBuilder.AddValue("Ridge Size")
-                        .Description("Size of ridge features")
-                        .Default(0.5f).Range(0f, 1f).Bind(out ConfigRidgeSize);
-                    groupBuilder.AddValue("Ridge Blend")
-                        .Description("Smoothness of ridges blending into base terrain")
-                        .Default(0.5f).Range(0f, 1f).Bind(out ConfigRidgeBlend);
-                    groupBuilder.AddValue("Ridge Amount")
-                        .Description("How much ridges")
-                        .Default(0.5f).Range(0f, 1f).Bind(out ConfigRidgeAmount);
                 })
                 .AddGroup("BetterContinents.StartPosition", groupBuilder => {
                     groupBuilder.AddValue("Override Start Position")

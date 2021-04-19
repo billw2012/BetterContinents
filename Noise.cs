@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.Linq;
 using UnityEngine;
 using Random = System.Random;
 
@@ -62,18 +63,31 @@ namespace BetterContinents
             public BlendOperations.BlendModeType BlendMode;
 
             public static NoiseSettings Default() =>
-                new NoiseSettings
+                new ()
                 {
                     NoiseType = FastNoiseLite.NoiseType.OpenSimplex2,
                     Frequency = 0.0005f,
                     FractalType = FastNoiseLite.FractalType.FBm,
-                    FractalOctaves = 4,
+                    FractalOctaves = 7,
                     FractalLacunarity = 2,
                     FractalGain = 0.5f,
                     FractalWeightedStrength = 0,
                 };
+            
+            public static NoiseSettings Ridged() =>
+                new ()
+                {
+                    NoiseType = FastNoiseLite.NoiseType.OpenSimplex2,
+                    Frequency = 0.0005f,
+                    FractalType = FastNoiseLite.FractalType.Ridged,
+                    FractalOctaves = 7,
+                    FractalLacunarity = 2,
+                    FractalGain = 0.5f,
+                    FractalWeightedStrength = 0,
+                };
+
             public static NoiseSettings DefaultWarp() =>
-                new NoiseSettings
+                new ()
                 {
                     NoiseType = FastNoiseLite.NoiseType.OpenSimplex2,
                     Frequency = 0.0005f,
@@ -82,6 +96,8 @@ namespace BetterContinents
                     FractalLacunarity = 2,
                     FractalGain = 0.5f,
                     FractalWeightedStrength = 0,
+                    DomainWarpAmp = 4000,
+                    DomainWarpType = FastNoiseLite.DomainWarpType.OpenSimplex2,
                 };
 
             public void Serialize(ZPackage pkg)
@@ -204,6 +220,41 @@ namespace BetterContinents
                 }
                 output($"blend mode {BlendMode}");
             }
+
+            public void CopyFrom(NoiseSettings from)
+            {
+                NoiseType = from.NoiseType; 
+                Frequency = from.Frequency; 
+                
+                FractalType = from.FractalType; 
+                FractalOctaves = from.FractalOctaves; 
+                FractalLacunarity = from.FractalLacunarity; 
+                FractalGain = from.FractalGain; 
+                FractalWeightedStrength = from.FractalWeightedStrength; 
+                FractalPingPongStrength = from.FractalPingPongStrength; 
+
+                
+                CellularDistanceFunction = from.CellularDistanceFunction;
+                CellularReturnType = from.CellularReturnType;
+                CellularJitter = from.CellularJitter;
+                
+                DomainWarpType = from.DomainWarpType;
+                DomainWarpAmp = from.DomainWarpAmp;
+
+                Invert = from.Invert;
+                
+                SmoothThresholdStart = from.SmoothThresholdStart;
+                SmoothThresholdEnd = from.SmoothThresholdEnd;
+                
+                Threshold = from.Threshold;
+                
+                RangeStart = from.RangeStart; 
+                RangeEnd = from.RangeEnd;
+                
+                Opacity = from.Opacity;
+                
+                BlendMode = from.BlendMode;
+            }
         }
         
         public class NoiseLayer
@@ -273,6 +324,15 @@ namespace BetterContinents
             var val = new NoiseStackSettings();
             val.NoiseLayers.Add(new NoiseLayer());
             return val;
+        }
+
+        public void AddNoiseLayer() => SetNoiseLayerCount(NoiseLayers.Count + 1);
+        public void RemoveNoiseLayer()
+        {
+            if (NoiseLayers.Count > 1)
+            {
+                NoiseLayers.RemoveAt(NoiseLayers.Count - 1);
+            }
         }
 
         public void SetNoiseLayerCount(int count)

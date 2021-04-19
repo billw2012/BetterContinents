@@ -32,7 +32,9 @@ namespace BetterContinents
             // Always reset the UI callbacks on scene change
             SceneManager.activeSceneChanged += (_, __) =>
             {
+                ColorTextures.Clear();
                 UICallbacks.Clear();
+                
                 // Only need these on the client
                 BorderTexture = CreateFillTexture(Color.Lerp(ValheimColor, Color.white, 0.25f));
                 FrontTexture = CreateFillTexture(Color.Lerp(ValheimColor, Color.black, 0.5f));
@@ -53,7 +55,7 @@ namespace BetterContinents
                         
                         if (WindowVisible)
                         {
-                            DebugUtils.Command.DrawSettingsWindow();
+                            DebugUtils.Command.CmdUI.DrawSettingsWindow();
                         }
                     }
                 });
@@ -163,12 +165,16 @@ namespace BetterContinents
         
         public static void Remove(string key) => UICallbacks.Remove(key);
         
-        public static Texture CreateFillTexture(Color32 color)
+        private static readonly Dictionary<Color, Texture2D> ColorTextures = new();
+        public static Texture2D CreateFillTexture(Color color)
         {
-            var tex = new Texture2D(1, 1);
-            tex.SetPixels32(new []{ color });
-            tex.Apply(false);
-            return tex;
+            if (ColorTextures.TryGetValue(color, out var texture) && texture != null)
+                return texture;
+            texture = new Texture2D(1, 1);
+            texture.SetPixels(new []{ color });
+            texture.Apply(false);
+            ColorTextures[color] = texture;
+            return texture;
         }
 
         public static void ProgressBar(int percent, string text)

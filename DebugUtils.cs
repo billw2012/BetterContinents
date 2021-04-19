@@ -234,38 +234,6 @@ namespace BetterContinents
                         setter: SetHeightmapValue<float>(value => BetterContinents.Settings.RoughmapBlend = value),
                         getter: () => BetterContinents.Settings.RoughmapBlend);
                 });
-                // bc.AddGroup("f", "flatmap settings, get more info with 'bc param f help'", 
-                // subcmd =>
-                // {
-                //     AddHeightmapSubcommand(subcmd, "fn", "set flatmap filename", "(full path including filename, or nothing to disable)", args =>
-                //     {
-                //         if(string.IsNullOrEmpty(args))
-                //         {
-                //             BetterContinents.Settings.DisableFlatmap();
-                //             Console.instance.Print($"<color=orange>Flatmap disabled!</color>");
-                //         }
-                //         else if (!File.Exists(BetterContinents.CleanPath(args)))
-                //             Console.instance.Print($"<color=red>ERROR: {args} doesn't exist</color>");
-                //         else
-                //         {
-                //             BetterContinents.Settings.SetFlatmapPath(args);
-                //             if (BetterContinents.Settings.UseRoughInvertedAsFlat)
-                //             {
-                //                 Console.instance.Print(
-                //                     $"<color=orange>WARNING: 'Use Rough Inverted as Flat' is enabled so flatmap has no effect. Use 'bc urm 0' to disable it.</color>");
-                //             }
-                //         }
-                //     });
-                //
-                //     AddHeightmapSubcommand(subcmd, "u", "use roughmap inverted for flat", "(0 to disable, 1 to enable)", args =>
-                //     {
-                //         BetterContinents.Settings.UseRoughInvertedAsFlat = int.Parse(args) != 0;
-                //     });
-                //     AddHeightmapSubcommand(subcmd, "bl", "flatmap blend", "(between 0 and 1)", args =>
-                //     {
-                //         BetterContinents.Settings.FlatmapBlend = float.Parse(args);
-                //     });
-                // });
                 bc.AddGroup("b", "Biomemap", "biomemap settings, get more info with 'bc param b help'", group => {
                     group.AddValue<string>("fn", "Biomemap Filename", "set biomemap filename (full path including filename, or nothing to disable)",
                         defaultValue: string.Empty,
@@ -371,7 +339,7 @@ namespace BetterContinents
                         getter: () => BetterContinents.Settings.StartPositionY);
                 });
 
-                void AddNoiseCommands(Command.SubcommandBuilder group, NoiseStackSettings.NoiseSettings settings, bool isWarp = false)
+                void AddNoiseCommands(Command.SubcommandBuilder group, NoiseStackSettings.NoiseSettings settings, bool isWarp = false, bool isMask = false)
                 {
                     // Basic
                     group.AddValue("nt", "Noise Type", "noise type",
@@ -483,18 +451,36 @@ namespace BetterContinents
                 bc.AddGroup("hl", "Height Layer Settings", "height layer settings",
                     hl  => {
                         var baseNoise = BetterContinents.Settings.BaseHeightNoise;
-                        hl.AddValue<int>("n", "Number of Layers", "set number of layers",
-                            defaultValue: 1, minValue: 1, maxValue: 5,
-                            getter: () => baseNoise.NoiseLayers.Count,
-                            setter: SetHeightmapValue<int>(val => baseNoise.SetNoiseLayerCount(val)));
+                        // hl.AddValue<int>("n", "Number of Layers", "set number of layers",
+                        //         defaultValue: 1, minValue: 1, maxValue: 5,
+                        //         getter: () => baseNoise.NoiseLayers.Count,
+                        //         setter: SetHeightmapValue<int>(val => baseNoise.SetNoiseLayerCount(val)))
+                        //     .CustomDrawer(cmd =>
+                        //     {
+                        //         GUILayout.BeginHorizontal();
+                        //         if(baseNoise.NoiseLayers.Count > )
+                        //         if (GUILayout.Button("-"))
+                        //         {
+                        //             
+                        //         }
+                        //         GUILayout.EndHorizontal();
+                        //     });
+
+                        hl.AddCommand("add", "Add Layer", "", HeightmapCommand(_ => baseNoise.AddNoiseLayer()));
 
                         for (int i = 0; i < baseNoise.NoiseLayers.Count; i++)
                         {
                             int index = i;
                             var noiseLayer = baseNoise.NoiseLayers[index];
                             hl.AddGroup(index.ToString(),  $"layer {index}", $"layer {index} settings", l => {
+                                l.AddGroup("npreset", "Apply Noise Preset", "", preset => {
+                                    preset.AddCommand("def", "Default", "General noise layer", 
+                                        HeightmapCommand(_ => noiseLayer.noiseSettings = NoiseStackSettings.NoiseSettings.Default()));
+                                    preset.AddCommand("ri", "Ridges", "Ridged noise", 
+                                        HeightmapCommand(_ => noiseLayer.noiseSettings = NoiseStackSettings.NoiseSettings.Ridged()));
+                                });
                                 l.AddGroup("n", "Noise", $"layer {index} noise settings", nm 
-                                    => AddNoiseCommands(nm, noiseLayer.noiseSettings));
+                                    => AddNoiseCommands(nm, noiseLayer.noiseSettings)).UIBackgroundColor(new Color32(0xCE, 0xB3, 0xAB, 0x7f));
                                 l.AddGroup("nw", "Noise Warp", $"layer {index} noise warp settings", nm => {
                                     nm.AddValue<bool>("on", "Enabled", $"layer {index} noise warp enabled",
                                         defaultValue: false,
@@ -509,14 +495,35 @@ namespace BetterContinents
                                     {
                                         AddNoiseCommands(nm, noiseLayer.noiseWarpSettings, isWarp: true);
                                     }
-                                });
+                                }).UIBackgroundColor(new Color32(0xCA, 0xAE, 0xA5, 0x7f));
                                 l.AddValue<int>(null, $"Noise layer {index} preview", $"Noise layer {index} preview")
                                     .CustomDrawer(_ => DrawNoisePreview(index));
 
                                 if (index > 0)
                                 {
-                                    l.AddGroup("m", "Mask", $"layer {index} mask settings", nm =>
-                                    {
+                                    l.AddGroup("mpreset", "Apply Mask Preset", "", preset => {
+                                        preset.AddCommand("def", "Default", "General mask layer", HeightmapCommand(_ =>
+                                        {
+                                            noiseLayer.maskSettings = NoiseStackSettings.NoiseSettings.Default();
+                                            noiseLayer.maskSettings.SmoothThresholdStart = 0.6f;
+                                            noiseLayer.maskSettings.SmoothThresholdEnd = 0.75f;
+                                        }));
+                                        preset.AddCommand("25%", "25%", "About 25% coverage with smooth threshold", HeightmapCommand(_ =>
+                                        {
+                                            noiseLayer.maskSettings = NoiseStackSettings.NoiseSettings.Default();
+                                            noiseLayer.maskSettings.SmoothThresholdStart = 0.6f;
+                                            noiseLayer.maskSettings.SmoothThresholdEnd = 0.75f;
+                                        }));
+                                        preset.AddCommand("ri", "Ridges", "Warped with smooth threshold", HeightmapCommand(_ =>
+                                        {
+                                            noiseLayer.maskSettings = NoiseStackSettings.NoiseSettings.Default();
+                                            noiseLayer.maskSettings.SmoothThresholdStart = 0.6f;
+                                            noiseLayer.maskSettings.SmoothThresholdEnd = 0.75f;
+                                            noiseLayer.maskWarpSettings = NoiseStackSettings.NoiseSettings.DefaultWarp();
+                                        }));
+                                    });
+
+                                    l.AddGroup("m", "Mask", $"layer {index} mask settings", nm => {
                                         nm.AddValue<bool>("on", "Enabled", $"layer {index} mask enabled",
                                             defaultValue: false,
                                             setter: SetHeightmapValue<bool>(value =>
@@ -530,13 +537,12 @@ namespace BetterContinents
                                             getter: () => noiseLayer.maskSettings != null);
                                         if (noiseLayer.maskSettings != null)
                                         {
-                                            AddNoiseCommands(nm, noiseLayer.maskSettings);
+                                            AddNoiseCommands(nm, noiseLayer.maskSettings, isMask: true);
                                         }
-                                    });
+                                    }).UIBackgroundColor(new Color32(0xBA, 0xA5, 0xFF, 0x7f));
                                     if (noiseLayer.maskSettings != null)
                                     {
-                                        l.AddGroup("mw", "Mask", $"layer {index} mask warp settings", nm =>
-                                        {
+                                        l.AddGroup("mw", "Mask", $"layer {index} mask warp settings", nm => {
                                             nm.AddValue<bool>("on", "Enabled", $"layer {index} mask warp enabled",
                                                 defaultValue: false,
                                                 setter: SetHeightmapValue<bool>(value =>
@@ -552,18 +558,30 @@ namespace BetterContinents
                                             {
                                                 AddNoiseCommands(nm, noiseLayer.maskWarpSettings, isWarp: true);
                                             }
-                                        });
+                                        }).UIBackgroundColor(new Color32(0xB1, 0x99, 0xFF, 0x7f));
                                         l.AddValue<int>(null, $"Mask layer {index} preview",
                                                 $"Mask layer {index} preview")
                                             .CustomDrawer(_ => DrawMaskPreview(index));
                                     }
+                                }
+
+                                l.AddCommand("delete", "Delete Layer", "", 
+                                        HeightmapCommand(_ => baseNoise.NoiseLayers.Remove(noiseLayer)))
+                                    .UIBackgroundColor(new Color(0.5f, 0.1f, 0.1f));
+                                if (index > 0 && index < baseNoise.NoiseLayers.Count - 1)
+                                {
+                                    l.AddCommand("down", "Move Down", "Swap this layer with the one below", HeightmapCommand(_ => {
+                                        var other = baseNoise.NoiseLayers[index + 1];
+                                        baseNoise.NoiseLayers[index + 1] = noiseLayer;
+                                        baseNoise.NoiseLayers[index] = other;
+                                    }));
                                 }
                             });
                         }
                         
                         hl.AddValue<int>(null, $"Final preview", "preview of final heightmap")
                             .CustomDrawer(_ => DrawNoisePreview(baseNoise.NoiseLayers.Count));
-                    });
+                    }).UIBackgroundColor(new Color32(0xB4, 0x9A, 0x67, 0x7f));
                 
                 // AddHeightmapSubcommand(command, "num", "height noise layer count", "(count from 0 to 4)", args => BetterContinents.Settings.BaseHeightNoise.SetNoiseLayerCount(int.Parse(args)));
                 // for (int i = 0; i < 4; i++)
@@ -621,7 +639,7 @@ namespace BetterContinents
                 //             });
                 //     });
                 // }
-            });
+            }).UIBackgroundColor(new Color32(0x46, 0x63, 0x65, 0x7f));
         }
         
         public static void RunConsoleCommand(string text)
@@ -657,7 +675,7 @@ namespace BetterContinents
         private static readonly Command rootCommand;
         private static List<Texture> noisePreviewTextures = null;
         private static List<Texture> maskPreviewTextures = null;
-        private static List<bool> noisePreviewExpanded = new List<bool>();
+        private static readonly List<bool> noisePreviewExpanded = new List<bool>();
 
         private const int NoisePreviewSize = 512;
         private static (Texture noise, Texture mask) GetPreviewTextures(int layerIndex)

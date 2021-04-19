@@ -1,7 +1,6 @@
 ﻿using System;
 using System.Collections;
 using System.Collections.Generic;
-using System.ComponentModel;
 using System.Globalization;
 using System.Linq;
 using UnityEngine;
@@ -27,6 +26,7 @@ namespace BetterContinents
             private readonly Type valueType;
             private readonly Command parent;
 
+            private Color backgroundColor;
             private object defaultValue;
             private KeyValuePair<object, object>? range;
             private List<object> validValues;
@@ -56,16 +56,6 @@ namespace BetterContinents
             // {
             //     { typeof(float?), o => $"{o ?? }" }
             // };
-
-            private static readonly Dictionary<Type, Action<Command>> DefaultDrawers = new()
-            {
-                {typeof(bool), DrawBoolField},
-                // {typeof(Color), DrawColor },
-                // {typeof(Vector2), DrawVector2 },
-                // {typeof(Vector3), DrawVector3 },
-                // {typeof(Vector4), DrawVector4 },
-                // {typeof(Quaternion), DrawQuaternion },
-            };
 
             private Command(CommandType commandType, Command parent, string cmd, string uiName, string desc, Type valueType = null)
             {
@@ -145,323 +135,7 @@ namespace BetterContinents
                     AddValueNullable<T>(name, uiName, desc, defaultValue, setter, getter)
                         .List(list);
             }
-
-            private static Rect settingWindowRect;
-            private static Vector2 settingWindowScrollPos;
-
-            public static void DrawSettingsWindow()
-            {
-                settingWindowRect = GUILayout.Window((ModInfo.Name + "SettingsWindow").GetHashCode(), settingWindowRect, Window,
-                    "Better Continents", GUILayout.MinWidth(Mathf.Max(LeftColumnWidth + RightColumnWidth + 100, NoisePreviewSize + 100)), GUILayout.MinHeight(Screen.height - 250));
-                if (settingWindowRect.Contains(Input.mousePosition))
-                {
-                    Input.ResetInputAxes();
-                }
-            }
             
-            public static bool DrawCurrentDropdown()
-            {
-                if (ComboBox.CurrentDropdownDrawer != null)
-                {
-                    ComboBox.CurrentDropdownDrawer.Invoke();
-                    ComboBox.CurrentDropdownDrawer = null;
-                    return true;
-                }
-                return false;
-            }
-            
-            private static void DrawTooltip(Rect area)
-            {
-                if (!string.IsNullOrEmpty(GUI.tooltip))
-                {
-                    var currentEvent = Event.current;
-
-                    var style = new GUIStyle
-                    {
-                        normal = new GUIStyleState { textColor = Color.black, background = Texture2D.whiteTexture },
-                        wordWrap = true,
-                        alignment = TextAnchor.MiddleCenter
-                    };
-
-                    const int width = 400;
-                    var height = style.CalcHeight(new GUIContent(GUI.tooltip), 400) + 10;
-
-                    var x = currentEvent.mousePosition.x + width > area.width
-                        ? area.width - width
-                        : currentEvent.mousePosition.x;
-
-                    var y = currentEvent.mousePosition.y + 25 + height > area.height
-                        ? currentEvent.mousePosition.y - height
-                        : currentEvent.mousePosition.y + 25;
-
-                    GUI.Box(new Rect(x, y, width, height), GUI.tooltip, style);
-                }
-            }
-
-            private static void Window(int _)
-            {
-                GUILayout.BeginVertical(new GUIStyle { normal = new GUIStyleState { background = Texture2D.grayTexture } });
-                
-                GUILayout.BeginHorizontal(GUI.skin.box);
-                {
-                    GUILayout.Label("Better Continents World Settings", GUILayout.ExpandWidth(true));
-                    if (GUILayout.Button("Close", GUILayout.ExpandWidth(false)))
-                    {
-                        
-                    }
-                }
-                GUILayout.EndHorizontal();
-                
-                GUI.DragWindow(new Rect(0, 0, 10000, 20));
-                
-                settingWindowScrollPos = GUILayout.BeginScrollView(settingWindowScrollPos, false, true);
-
-                GUILayout.BeginVertical();
-                
-                rootCommand.DrawUI();
-                
-                GUILayout.EndVertical();
-                
-                GUILayout.EndScrollView();
-                
-                if (!DrawCurrentDropdown())
-                    DrawTooltip(settingWindowRect);
-                
-                GUILayout.EndVertical();
-            }
-
-            private class CommandUIState
-            {
-                public bool uiExpanded;
-                public ComboBox comboBox;
-                public string stringValue;
-            }
-
-            private static Dictionary<string, CommandUIState> commandUIState = new Dictionary<string, CommandUIState>();
-
-            private static CommandUIState GetUIState(Command cmd)
-            {
-                var id = cmd.GetFullCmdName();
-                if (!commandUIState.TryGetValue(id, out var state))
-                {
-                    state = new CommandUIState();
-                    commandUIState.Add(id, state);
-                }
-
-                return state;
-            }
-            
-            private static GUIStyle groupHeaderSkin;
-            private const float LeftColumnWidth = 150;
-            private const int RightColumnWidth = 250;
-            // private static Rect SettingWindowRect;
-            
-            public static bool DrawGroupHeader(GUIContent title, bool isExpanded)
-            {
-                groupHeaderSkin ??= new GUIStyle(GUI.skin.label)
-                {
-                    alignment = TextAnchor.UpperCenter,
-                    wordWrap = true,
-                    stretchWidth = true,
-                    fontSize = 14
-                };
-                if (!isExpanded) title.text += "...";
-                return GUILayout.Button(title, groupHeaderSkin, GUILayout.ExpandWidth(true));
-            }
-            
-            public void DrawUI()
-            {
-                if (customDrawer != null)
-                {
-                    customDrawer(this);
-                    return;
-                }
-                
-                var allSubcommands = GetSubcommands();
-                var label = new GUIContent(uiName, desc);
-                var state = GetUIState(this);
-                switch (commandType)
-                {
-                    case CommandType.Group:
-                        GUILayout.BeginVertical(GUI.skin.box);
-                    {
-                        // We have no parent then we are the root command and should skip the header and just show subcommands always
-                        if (parent != null && DrawGroupHeader(label, state.uiExpanded)) state.uiExpanded = !state.uiExpanded;
-                        if (parent == null || state.uiExpanded)
-                        {
-                            foreach (var subcmd in allSubcommands)
-                            {
-                                subcmd.DrawUI();
-                                GUILayout.Space(2);
-                            }
-                        }
-                    }
-                        GUILayout.EndVertical();
-                        break;
-                    case CommandType.Command:
-                        if (GUILayout.Button(label)) {
-                            setValue(null);
-                        }
-                        break;
-                    case CommandType.Value:
-                        GUILayout.BeginHorizontal();
-                    {
-                        GUILayout.Label(label, GUILayout.Width(LeftColumnWidth), GUILayout.MaxWidth(LeftColumnWidth));
-                        DrawSettingValue(state);
-                    }
-                        GUILayout.EndHorizontal();
-                        break;
-                    default:
-                        throw new ArgumentOutOfRangeException();
-                }
-            }
-            
-            private void DrawSettingValue(CommandUIState state)
-            {
-                if (customDrawer != null)
-                    customDrawer(this);
-                //else if (this.range.HasValue)
-                //    DrawRangeField();
-                else if (validValues != null)
-                    DrawListField(state);
-                else if (valueType.IsEnum)
-                {
-                    if (valueType.GetCustomAttributes(typeof(FlagsAttribute), false).Any())
-                        DrawFlagsField(Enum.GetValues(valueType), RightColumnWidth);
-                    else
-                        DrawComboboxField(state, Enum.GetValues(valueType), settingWindowRect.yMax);
-                }
-                else
-                {
-                    DrawFieldBasedOnValueType(state);
-                }
-            }
-            
-            private void DrawListField(CommandUIState state)
-            {
-                if (validValues.Count == 0)
-                    throw new ArgumentException($"Valid values for {cmd} is declared but empty, it must have at least one value");
-
-                if (!valueType.IsInstanceOfType(validValues.FirstOrDefault(x => x != null)))
-                    throw new ArgumentException($"Valid values for {cmd} contains a value of the wrong type");
-
-                DrawComboboxField(state, validValues, settingWindowRect.yMax);
-            }
-
-            private void DrawFieldBasedOnValueType(CommandUIState state)
-            {
-                if (DefaultDrawers.TryGetValue(valueType, out var drawMethod))
-                    drawMethod(this);
-                else
-                    DrawUnknownField(state);
-            }
-            
-            private void DrawUnknownField(CommandUIState state)
-            {
-                if(state.stringValue == null)
-                {
-                    var rawValue = getValue();
-                    state.stringValue = rawValue == null ? "" : rawValue.ToString();
-                }
-
-                var name = GetFullCmdName();
-                GUI.SetNextControlName(name);
-                state.stringValue = GUILayout.TextField(state.stringValue, GUILayout.MaxWidth(RightColumnWidth));
-                if (GUI.GetNameOfFocusedControl() == name)
-                {
-                    if (Event.current.isKey && Event.current.keyCode == KeyCode.Return) //GUILayout.Button("apply"))
-                    {
-                        setValue(Convert.ChangeType(state.stringValue, valueType, CultureInfo.InvariantCulture));
-                        Event.current.Use();
-                        state.stringValue = null;
-                    }
-                }
-                else
-                {
-                    state.stringValue = null;
-                }
-                
-                GUILayout.FlexibleSpace();
-            }
-
-            private static void DrawBoolField(Command cmd)
-            {
-                var boolVal = (bool)cmd.getValue();
-                var result = GUILayout.Toggle(boolVal, boolVal ? "Enabled" : "Disabled", GUILayout.ExpandWidth(true));
-                if (result != boolVal)
-                    cmd.setValue(result);
-            }
-
-            private void DrawFlagsField(IList enumValues, int maxWidth)
-            {
-                var currentValue = Convert.ToInt64(getValue());
-                var allValues = enumValues.Cast<Enum>().Select(x => new { name = x.ToString(), val = Convert.ToInt64(x) }).ToArray();
-
-                // Vertically stack Horizontal groups of the options to deal with the options taking more width than is available in the window
-                GUILayout.BeginVertical(GUILayout.MaxWidth(maxWidth));
-                {
-                    for (var index = 0; index < allValues.Length;)
-                    {
-                        GUILayout.BeginHorizontal();
-                        {
-                            var currentWidth = 0;
-                            for (; index < allValues.Length; index++)
-                            {
-                                var value = allValues[index];
-
-                                // Skip the 0 / none enum value, just uncheck everything to get 0
-                                if (value.val != 0)
-                                {
-                                    // Make sure this horizontal group doesn't extend over window width, if it does then start a new horiz group below
-                                    var textDimension = (int)GUI.skin.toggle.CalcSize(new GUIContent(value.name)).x;
-                                    currentWidth += textDimension;
-                                    if (currentWidth > maxWidth)
-                                        break;
-
-                                    GUI.changed = false;
-                                    var newVal = GUILayout.Toggle((currentValue & value.val) == value.val, value.name,
-                                        GUILayout.ExpandWidth(false));
-                                    if (GUI.changed)
-                                    {
-                                        var newValue = newVal ? currentValue | value.val : currentValue & ~value.val;
-                                        setValue(Enum.ToObject(valueType, newValue));
-                                    }
-                                }
-                            }
-                        }
-                        GUILayout.EndHorizontal();
-                    }
-
-                    GUI.changed = false;
-                }
-                GUILayout.EndVertical();
-
-                // Make sure the reset button is properly spaced
-                GUILayout.FlexibleSpace();
-            }
-
-            private void DrawComboboxField(CommandUIState state, IList list, float windowYmax)
-            {
-                var buttonText = new GUIContent(getValue().ToString());
-                var dispRect = GUILayoutUtility.GetRect(buttonText, GUI.skin.button, GUILayout.ExpandWidth(true));
-
-                if (state.comboBox == null)
-                {
-                    state.comboBox = new ComboBox(dispRect, buttonText, list.Cast<object>().Select(v => new GUIContent(v.ToString())).ToArray(), GUI.skin.button);
-                }
-                else
-                {
-                    state.comboBox.Rect = dispRect;
-                    state.comboBox.ButtonContent = buttonText;
-                }
-
-                state.comboBox.Show(id =>
-                {
-                    if (id >= 0 && id < list.Count)
-                        setValue(list[id]);
-                });
-            }
-
             public bool Run(string text)
             {
                 bool hasArgs = text.StartsWith(cmd + " ");
@@ -598,6 +272,12 @@ namespace BetterContinents
                 return this;
             }
 
+            public Command UIBackgroundColor(Color32 color)
+            {
+                backgroundColor = color;
+                return this;
+            }
+
             public Command Subcommands(Action<SubcommandBuilder> builder)
             {
                 subCommandBuilder = builder;
@@ -672,9 +352,373 @@ namespace BetterContinents
                 }
             }
 
-            public override string ToString()
+            public override string ToString() => $"{nameof(cmd)}: {cmd}, {nameof(desc)}: {desc}, {nameof(valueType)}: {valueType}";
+            
+            public static class CmdUI
             {
-                return $"{nameof(cmd)}: {cmd}, {nameof(desc)}: {desc}, {nameof(valueType)}: {valueType}";
+                private static Rect settingWindowRect;
+                private static Vector2 settingWindowScrollPos;
+                
+                private static readonly Dictionary<Type, Action<Command>> DefaultDrawers = new() {
+                    {typeof(bool), DrawBoolField},
+                    // {typeof(Color), DrawColor },
+                    // {typeof(Vector2), DrawVector2 },
+                    // {typeof(Vector3), DrawVector3 },
+                    // {typeof(Vector4), DrawVector4 },
+                    // {typeof(Quaternion), DrawQuaternion },
+                };
+
+                public static void DrawSettingsWindow()
+                {
+                    settingWindowRect = GUILayout.Window(
+                        (ModInfo.Name + "SettingsWindow").GetHashCode(),
+                        settingWindowRect,
+                        Window,
+                        "Better Continents",
+                        GUILayout.MinWidth(Mathf.Max(LeftColumnWidth + RightColumnWidth + 100, NoisePreviewSize + 100)),
+                        GUILayout.MinHeight(Screen.height - 250)
+                        );
+                    if (settingWindowRect.Contains(Input.mousePosition))
+                    {
+                        Input.ResetInputAxes();
+                    }
+                }
+
+                private static void DrawUI(Command cmd)
+                {
+                    if (cmd.customDrawer != null)
+                    {
+                        cmd.customDrawer(cmd);
+                        return;
+                    }
+                    
+                    var allSubcommands = cmd.GetSubcommands();
+                    var label = new GUIContent(cmd.uiName, cmd.desc);
+                    var state = GetUIState(cmd);
+
+                    switch (cmd.commandType)
+                    {
+                        case CommandType.Group:
+                            var groupStyle = GUI.skin.box;
+                            if (cmd.backgroundColor != default)
+                            {
+                                groupStyle = new GUIStyle(GUI.skin.box)
+                                {
+                                    normal = {background = UI.CreateFillTexture(cmd.backgroundColor)}
+                                };
+                            }
+
+                            GUILayout.BeginVertical(groupStyle);
+                            
+                            // We have no parent then we are the root command and should skip the header and just show subcommands always
+                            if (cmd.parent != null && DrawGroupHeader(label, state.uiExpanded)) state.uiExpanded = !state.uiExpanded;
+                            if (cmd.parent == null || state.uiExpanded)
+                            {
+                                foreach (var subcmd in allSubcommands)
+                                {
+                                    DrawUI(subcmd);
+                                    GUILayout.Space(2);
+                                }
+                            }
+
+                            GUILayout.EndVertical();
+                            
+                            break;
+                        case CommandType.Command:
+                            var buttonStyle = GUI.skin.button;
+                            if (cmd.backgroundColor != default)
+                            {
+                                buttonStyle = new GUIStyle(GUI.skin.button)
+                                {
+                                    normal = {background = UI.CreateFillTexture(cmd.backgroundColor)}
+                                };
+                            }
+                            
+                            if (GUILayout.Button(label, buttonStyle)) {
+                                cmd.setValue(null);
+                            }
+                            break;
+                        case CommandType.Value:
+                            var valueStyle = GUIStyle.none;
+                            if (cmd.backgroundColor != default)
+                            {
+                                valueStyle = new GUIStyle(GUIStyle.none)
+                                {
+                                    normal = {background = UI.CreateFillTexture(cmd.backgroundColor)}
+                                };
+                            }
+
+                            GUILayout.BeginHorizontal(valueStyle);
+                            {
+                                GUILayout.Label(label, GUILayout.Width(LeftColumnWidth), GUILayout.MaxWidth(LeftColumnWidth));
+                                DrawSettingValue(cmd, state);
+                            }
+                            GUILayout.EndHorizontal();
+                            break;
+                        default:
+                            throw new ArgumentOutOfRangeException();
+                    }
+                }
+
+                private static bool DrawCurrentDropdown()
+                {
+                    if (ComboBox.CurrentDropdownDrawer != null)
+                    {
+                        ComboBox.CurrentDropdownDrawer.Invoke();
+                        ComboBox.CurrentDropdownDrawer = null;
+                        return true;
+                    }
+
+                    return false;
+                }
+
+                private static void DrawTooltip(Rect area)
+                {
+                    if (!string.IsNullOrEmpty(GUI.tooltip))
+                    {
+                        var currentEvent = Event.current;
+
+                        var style = new GUIStyle
+                        {
+                            normal = new GUIStyleState {textColor = Color.black, background = Texture2D.whiteTexture},
+                            wordWrap = true,
+                            alignment = TextAnchor.MiddleCenter
+                        };
+
+                        const int width = 400;
+                        var height = style.CalcHeight(new GUIContent(GUI.tooltip), 400) + 10;
+
+                        var x = currentEvent.mousePosition.x + width > area.width
+                            ? area.width - width
+                            : currentEvent.mousePosition.x;
+
+                        var y = currentEvent.mousePosition.y + 25 + height > area.height
+                            ? currentEvent.mousePosition.y - height
+                            : currentEvent.mousePosition.y + 25;
+
+                        GUI.Box(new Rect(x, y, width, height), GUI.tooltip, style);
+                    }
+                }
+
+                private static void Window(int _)
+                {
+                    GUILayout.BeginVertical(new GUIStyle
+                        {normal = new GUIStyleState {background = Texture2D.grayTexture}});
+
+                    GUILayout.BeginHorizontal(GUI.skin.box);
+                    {
+                        GUILayout.Label("Better Continents World Settings", GUILayout.ExpandWidth(true));
+                        if (GUILayout.Button("Close", GUILayout.ExpandWidth(false)))
+                        {
+
+                        }
+                    }
+                    GUILayout.EndHorizontal();
+
+                    GUI.DragWindow(new Rect(0, 0, 10000, 20));
+
+                    settingWindowScrollPos = GUILayout.BeginScrollView(settingWindowScrollPos, false, true);
+
+                    GUILayout.BeginVertical();
+
+                    DrawUI(rootCommand);
+
+                    GUILayout.EndVertical();
+
+                    GUILayout.EndScrollView();
+
+                    if (!DrawCurrentDropdown())
+                        DrawTooltip(settingWindowRect);
+
+                    GUILayout.EndVertical();
+                }
+
+                private class CommandUIState
+                {
+                    public bool uiExpanded;
+                    public ComboBox comboBox;
+                    public string stringValue;
+                }
+
+                private static Dictionary<string, CommandUIState> commandUIState =
+                    new Dictionary<string, CommandUIState>();
+
+                private static CommandUIState GetUIState(Command cmd)
+                {
+                    var id = cmd.GetFullCmdName();
+                    if (!commandUIState.TryGetValue(id, out var state))
+                    {
+                        state = new CommandUIState();
+                        commandUIState.Add(id, state);
+                    }
+
+                    return state;
+                }
+
+                private static GUIStyle groupHeaderSkin;
+                private const float LeftColumnWidth = 150;
+
+                private const int RightColumnWidth = 250;
+                // private static Rect SettingWindowRect;
+
+                private static bool DrawGroupHeader(GUIContent title, bool isExpanded)
+                {
+                    groupHeaderSkin ??= new GUIStyle(GUI.skin.label)
+                    {
+                        alignment = TextAnchor.UpperCenter,
+                        wordWrap = true,
+                        stretchWidth = true,
+                        fontSize = 14
+                    };
+                    if (!isExpanded) title.text += "...";
+                    return GUILayout.Button(title, groupHeaderSkin, GUILayout.ExpandWidth(true));
+                }
+                
+                private static void DrawSettingValue(Command cmd, CommandUIState state)
+                {
+                    if (cmd.customDrawer != null)
+                        cmd.customDrawer(cmd);
+                    //else if (this.range.HasValue)
+                    //    DrawRangeField();
+                    else if (cmd.validValues != null)
+                        DrawListField(cmd, state);
+                    else if (cmd.valueType.IsEnum)
+                    {
+                        if (cmd.valueType.GetCustomAttributes(typeof(FlagsAttribute), false).Any())
+                            DrawFlagsField(cmd, Enum.GetValues(cmd.valueType), RightColumnWidth);
+                        else
+                            DrawComboboxField(cmd, state, Enum.GetValues(cmd.valueType), settingWindowRect.yMax);
+                    }
+                    else
+                    {
+                        DrawFieldBasedOnValueType(cmd, state);
+                    }
+                }
+                
+                private static void DrawListField(Command cmd, CommandUIState state)
+                {
+                    if (cmd.validValues.Count == 0)
+                        throw new ArgumentException($"Valid values for {cmd.cmd} is declared but empty, it must have at least one value");
+
+                    if (!cmd.valueType.IsInstanceOfType(cmd.validValues.FirstOrDefault(x => x != null)))
+                        throw new ArgumentException($"Valid values for {cmd.cmd} contains a value of the wrong type");
+
+                    DrawComboboxField(cmd, state, cmd.validValues, settingWindowRect.yMax);
+                }
+
+                private static void DrawFieldBasedOnValueType(Command cmd, CommandUIState state)
+                {
+                    if (DefaultDrawers.TryGetValue(cmd.valueType, out var drawMethod))
+                        drawMethod(cmd);
+                    else
+                        DrawUnknownField(cmd, state);
+                }
+                
+                private static void DrawUnknownField(Command cmd, CommandUIState state)
+                {
+                    if(state.stringValue == null)
+                    {
+                        var rawValue = cmd.getValue();
+                        state.stringValue = rawValue == null ? "" : rawValue.ToString();
+                    }
+
+                    var name = cmd.GetFullCmdName();
+                    GUI.SetNextControlName(name);
+                    state.stringValue = GUILayout.TextField(state.stringValue, GUILayout.MaxWidth(RightColumnWidth));
+                    if (GUI.GetNameOfFocusedControl() == name)
+                    {
+                        if (Event.current.isKey && Event.current.keyCode == KeyCode.Return) //GUILayout.Button("apply"))
+                        {
+                            cmd.setValue(Convert.ChangeType(state.stringValue, cmd.valueType, CultureInfo.InvariantCulture));
+                            Event.current.Use();
+                            state.stringValue = null;
+                        }
+                    }
+                    else
+                    {
+                        state.stringValue = null;
+                    }
+                    
+                    GUILayout.FlexibleSpace();
+                }
+
+                private static void DrawBoolField(Command cmd)
+                {
+                    var boolVal = (bool)cmd.getValue();
+                    var result = GUILayout.Toggle(boolVal, boolVal ? "Enabled" : "Disabled", GUILayout.ExpandWidth(true));
+                    if (result != boolVal)
+                        cmd.setValue(result);
+                }
+
+                private static void DrawFlagsField(Command cmd, IList enumValues, int maxWidth)
+                {
+                    var currentValue = Convert.ToInt64(cmd.getValue());
+                    var allValues = enumValues.Cast<Enum>().Select(x => new { name = x.ToString(), val = Convert.ToInt64(x) }).ToArray();
+
+                    // Vertically stack Horizontal groups of the options to deal with the options taking more width than is available in the window
+                    GUILayout.BeginVertical(GUILayout.MaxWidth(maxWidth));
+                    {
+                        for (var index = 0; index < allValues.Length;)
+                        {
+                            GUILayout.BeginHorizontal();
+                            {
+                                var currentWidth = 0;
+                                for (; index < allValues.Length; index++)
+                                {
+                                    var value = allValues[index];
+
+                                    // Skip the 0 / none enum value, just uncheck everything to get 0
+                                    if (value.val != 0)
+                                    {
+                                        // Make sure this horizontal group doesn't extend over window width, if it does then start a new horiz group below
+                                        var textDimension = (int)GUI.skin.toggle.CalcSize(new GUIContent(value.name)).x;
+                                        currentWidth += textDimension;
+                                        if (currentWidth > maxWidth)
+                                            break;
+
+                                        GUI.changed = false;
+                                        var newVal = GUILayout.Toggle((currentValue & value.val) == value.val, value.name,
+                                            GUILayout.ExpandWidth(false));
+                                        if (GUI.changed)
+                                        {
+                                            var newValue = newVal ? currentValue | value.val : currentValue & ~value.val;
+                                            cmd.setValue(Enum.ToObject(cmd.valueType, newValue));
+                                        }
+                                    }
+                                }
+                            }
+                            GUILayout.EndHorizontal();
+                        }
+
+                        GUI.changed = false;
+                    }
+                    GUILayout.EndVertical();
+
+                    // Make sure the reset button is properly spaced
+                    GUILayout.FlexibleSpace();
+                }
+
+                private static void DrawComboboxField(Command cmd, CommandUIState state, IList list, float windowYmax)
+                {
+                    var buttonText = new GUIContent(cmd.getValue().ToString());
+                    var dispRect = GUILayoutUtility.GetRect(buttonText, GUI.skin.button, GUILayout.ExpandWidth(true));
+
+                    if (state.comboBox == null)
+                    {
+                        state.comboBox = new ComboBox(dispRect, buttonText, list.Cast<object>().Select(v => new GUIContent(v.ToString())).ToArray(), GUI.skin.button);
+                    }
+                    else
+                    {
+                        state.comboBox.Rect = dispRect;
+                        state.comboBox.ButtonContent = buttonText;
+                    }
+
+                    state.comboBox.Show(id =>
+                    {
+                        if (id >= 0 && id < list.Count)
+                            cmd.setValue(list[id]);
+                    });
+                }
             }
         }
     }
