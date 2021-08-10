@@ -7,6 +7,7 @@ using System.Reflection;
 using System.Text;
 using System.Threading.Tasks;
 using HarmonyLib;
+using JetBrains.Annotations;
 using UnityEngine;
 
 namespace BetterContinents
@@ -16,11 +17,38 @@ namespace BetterContinents
         private static string LastConnectionError = null;
         
         // Dealing with settings, synchronization of them in multiplayer
-        [HarmonyPatch(typeof(ZNet))]
-        private class ZNetPatch
+        [HarmonyPatch]
+        private class ZRpcPatch
         {
-            private static string PeerName(ZNetPeer peer) => $"{peer.m_uid}";
-                
+            // When the world is set on the server (applies to single player as well), we should select the correct loaded settings
+            private static void Prefix(ZRpc __instance, string name, ref Action<ZRpc, ZPackage> f)
+            {
+                if (ZNet.instance.IsServer() && name == "PeerInfo")
+                {
+                    var RPC_PeerInfo = f;
+                    f = new Action<ZRpc, ZPackage>((rpc, pkg) => ZNetPatch.RPC_PeerInfoRedirect(rpc, pkg, () => RPC_PeerInfo(rpc, pkg)));
+                    Log($"Redirecting RPC_PeerInfo to allow BC config download");
+                }
+            }
+
+            private static MethodBase TargetMethod()
+            {
+                return typeof(ZRpc)
+                    .GetMethods()
+                    .Where(m => m.Name == nameof(ZRpc.Register))
+                    .First(m => m.GetParameters().Length == 2
+                                         && m.GetGenericArguments().Length == 1
+                                         && m.GetParameters()[0].ParameterType == typeof(string)
+                                         && m.GetParameters()[1].ParameterType == 
+                                         typeof(Action<,>).MakeGenericType(typeof(ZRpc), m.GetGenericArguments()[0]))
+                    .MakeGenericMethod(typeof(ZPackage)); 
+            }
+        }
+        
+        // Dealing with settings, synchronization of them in multiplayer
+        [HarmonyPatch(typeof(ZNet))]
+        public class ZNetPatch
+        {
             // When the world is set on the server (applies to single player as well), we should select the correct loaded settings
             [HarmonyPrefix, HarmonyPatch(nameof(ZNet.SetServer))]
             private static void SetServerPrefix(bool server, World world)
@@ -159,12 +187,17 @@ namespace BetterContinents
 
             private class BCClientInfo
             {
+                public long id;
+                public string player;
+                public ZNetPeer peer;
                 public string version;
                 public ZPackage worldCache;
                 public bool readyForPeerInfo;
+
+                public override string ToString() => $"{id} ({player})";
             }
-            
-            private static readonly Dictionary<long, BCClientInfo> ClientInfo = new Dictionary<long, BCClientInfo>();
+
+            private static readonly List<BCClientInfo> ClientInfo = new();
 
             private static readonly FieldInfo m_connectionStatus = AccessTools.Field(typeof(ZNet), "m_connectionStatus");
 
@@ -178,20 +211,21 @@ namespace BetterContinents
 
                 if (ZNet.instance.IsServer())
                 {
-                    ClientInfo.Remove(peer.m_uid);
+                    var bcClientInfo = new BCClientInfo { peer = peer, readyForPeerInfo = false };
+                    ClientInfo.Add(bcClientInfo);
                     peer.m_rpc.Register("BetterContinentsServerHandshake", (ZRpc rpc, string clientVersion, ZPackage worldCache) =>
                     {
-                        Log($"Receiving client {PeerName(peer)} version {clientVersion}");
+                        Log($"Receiving new client version {clientVersion}");
                         // We check this when sending settings (if we have a BC world loaded, otherwise it doesn't matter)
-                        ClientInfo[peer.m_uid] = new BCClientInfo { version = clientVersion, worldCache = worldCache, readyForPeerInfo = false };
+                        bcClientInfo.version = clientVersion;
+                        bcClientInfo.worldCache = worldCache;
                     });
                     
                     peer.m_rpc.Register("BetterContinentsReady", (ZRpc rpc, int stage) =>
                     {
                         Log($"Client is ready for PeerInfo");
-
                         // We wait for this flag before continuing after sending the world settings, allowing the client to behave asynchronously on its end
-                        ClientInfo[peer.m_uid].readyForPeerInfo = true;
+                        bcClientInfo.readyForPeerInfo = true;
                     });
                 }
                 else
@@ -289,7 +323,6 @@ namespace BetterContinents
                 Settings = loadTask.Result.Value;
                 Settings.Dump();
 
-
                 // We only care about server/client version match when the server sends a world that actually uses the mod
                 if (Settings.EnabledForThisWorld && ServerVersion != ModInfo.Version)
                 {
@@ -365,7 +398,6 @@ namespace BetterContinents
                 }
             }
 
-
             [HarmonyPrefix, HarmonyPatch("RPC_Error")]
             private static void RPC_ErrorPrefix(ref int error)
             {
@@ -376,68 +408,65 @@ namespace BetterContinents
                 }
             }
 
-            // Send our clients the settings for the currently loaded world. We do this before
-            // the body of the RPC_PeerInfo function, so as to ensure the data is all sent to the client before they need it.
-            [HarmonyPrefix, HarmonyPatch("RPC_PeerInfo")]
-            private static bool RPC_PeerInfoPrefix(ZNet __instance, ZRpc rpc, ZPackage pkg)
+            private static IEnumerator SendSettings(ZRpc rpc, ZPackage pkg, Action call_RPC_PeerInfo)
             {
-                if (__instance.IsServer() && Settings.EnabledForThisWorld)
+                static byte[] ArraySlice(byte[] source, int offset, int length)
                 {
-                    __instance.StartCoroutine(SendSettings(__instance, rpc, pkg));
-
-                    return false;
-                }
-                else if (__instance.IsServer())
-                {
-                    Log($"World doesn't use Better Continents, skipping version check and sync");
-                }
-                return true;
-            }
-
-            // This function will be fixed up to point at the un-prefixed version of the original function (it could have modifications though)
-            [HarmonyReversePatch]
-            [HarmonyPatch(typeof(ZNet), "RPC_PeerInfo")]
-            public static void RPC_PeerInfo(object instance, ZRpc rpc, ZPackage pkg)
-            {
-                throw new NotImplementedException("RPC_PeerInfo function was not patched correctly!");
-            }
-
-            private static IEnumerator SendSettings(ZNet instance, ZRpc rpc, ZPackage pkg)
-            {
-                byte[] ArraySlice(byte[] source, int offset, int length)
-                {
-                    var target = new byte[length];
+                    byte[] target = new byte[length];
                     Buffer.BlockCopy(source, offset, target, 0, length);
                     return target;
                 }
 
-                var peer = instance.GetPeers().First(p => p.m_rpc == rpc);
+                var peer = ZNet.instance.GetPeer(rpc);
+                if (peer == null)
+                {
+                    Log($"Couldn't find peer for rpc");
+                    rpc.Invoke("Error", ZNet.ConnectionStatus.ErrorConnectFailed);
+                    yield break;
+                }
+
+                var bcClientInfo = ClientInfo.FirstOrDefault(c => c.peer == peer);
+                if (bcClientInfo != null)
+                {
+                    // Peek some info (the main impl does this also)
+                    int startPos = pkg.GetPos();
+                    bcClientInfo.id = pkg.ReadLong();
+                    string version = pkg.ReadString();
+                    var refPos = pkg.ReadVector3();
+                    bcClientInfo.player = pkg.ReadString();
+                    pkg.SetPos(startPos);
+                    Log($"Registered client {bcClientInfo} is connecting");
+                }
+                else
+                {
+                    Log($"Unregistered client is connecting");
+                }
 
                 if (!Settings.EnabledForThisWorld)
                 {
-                    Log($"Skipping sending settings to {PeerName(peer)}, as Better Continents is not enabled in this world");
+                    Log($"Skipping sending settings, as Better Continents is not enabled in this world");
                 }
                 else
                 {
                     Log($"World is using Better Continents, so client version must match server version {ModInfo.Name}");
 
-                    if (!ClientInfo.TryGetValue(peer.m_uid, out var bcClientInfo))
+                    if (bcClientInfo?.version == null)
                     {
-                        Log($"Client info for {PeerName(peer)} not found, client has an old version of Better Continents, or none!");
+                        Log($"Client info not found, client has an old version of Better Continents, or none!");
                         rpc.Invoke("Error", ZNet.ConnectionStatus.ErrorConnectFailed);
                         ZNet.instance.Disconnect(peer);
                         yield break;
                     }
                     else if (bcClientInfo.version != ModInfo.Version)
                     {
-                        Log($"Client {PeerName(peer)} version {bcClientInfo.version} doesn't match server version {ModInfo.Version}");
+                        Log($"Client {bcClientInfo} version {bcClientInfo.version} doesn't match server version {ModInfo.Version}");
                         peer.m_rpc.Invoke("Error", 69);
                         ZNet.instance.Disconnect(peer);
                         yield break;
                     }
                     else
                     {
-                        Log($"Client {PeerName(peer)} version {bcClientInfo.version} matches server version {ModInfo.Version}");
+                        Log($"Client {bcClientInfo} version {bcClientInfo.version} matches server version {ModInfo.Version}");
                     }
                     
                     // This was the initial way that versioning was implemented, before the client->server way, so may
@@ -453,19 +482,19 @@ namespace BetterContinents
                     {
                         // We send hash and id
                         string cacheId = WorldCache.PackageID(settingsPackage);
-                        Log($"Client {PeerName(peer)} already has cached settings for world, instructing it to load those (id {cacheId})");
+                        Log($"Client {bcClientInfo} already has cached settings for world, instructing it to load those (id {cacheId})");
                         rpc.Invoke("BetterContinentsConfigLoadFromCache", cacheId);
                     }
                     else
                     {
-                        Log($"Client {PeerName(peer)} doesn't have cached settings, sending them now");
+                        Log($"Client {bcClientInfo} doesn't have cached settings, sending them now");
                         cleanSettings.Dump();
                         
                         var settingsData = settingsPackage.GetArray();
                         Log($"Sending settings package header for {settingsData.Length} byte stream");
                         rpc.Invoke("BetterContinentsConfigStart", settingsData.Length, GetHashCode(settingsData));
 
-                        const int SendChunkSize = 256 * 1024;
+                        const int SendChunkSize = 128 * 1024;
 
                         for (int sentBytes = 0; sentBytes < settingsData.Length;)
                         {
@@ -481,17 +510,31 @@ namespace BetterContinents
                             yield return new WaitUntil(() => rpc.GetSocket().GetSendQueueSize() < SendChunkSize || Time.time > timeout);
                             if (Time.time > timeout)
                             {
-                                Log($"Timed out sending config to client {PeerName(peer)} after 30 seconds, disconnecting them");
+                                Log($"Timed out sending config to client {bcClientInfo} after 30 seconds, disconnecting them");
                                 peer.m_rpc.Invoke("Error", ZNet.ConnectionStatus.ErrorConnectFailed);
                                 ZNet.instance.Disconnect(peer);
                                 yield break;
                             }
                         }
                     }
-                    yield return new WaitUntil(() => ClientInfo[peer.m_uid].readyForPeerInfo || !peer.m_socket.IsConnected());
+                    yield return new WaitUntil(() => bcClientInfo.readyForPeerInfo || !peer.m_socket.IsConnected());
                 }
 
-                RPC_PeerInfo(instance, rpc, pkg);
+                call_RPC_PeerInfo();
+            }
+
+            public static void RPC_PeerInfoRedirect(ZRpc rpc, ZPackage pkg, Action call_RPC_PeerInfo)
+            {
+                if (Settings.EnabledForThisWorld)
+                {
+                    Log($"Sending settings now");
+                    ZNet.instance.StartCoroutine(SendSettings(rpc, pkg, call_RPC_PeerInfo));
+                }
+                else
+                {
+                    Log($"World doesn't use Better Continents, skipping version check and sync");
+                    call_RPC_PeerInfo();
+                }
             }
         }
 
