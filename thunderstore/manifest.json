@@ -1,9 +1,9 @@
 {
     "name": "BetterContinents",
-    "version_number": "0.6.2",
+    "version_number": "0.6.3",
     "website_url": "https://www.nexusmods.com/valheim/mods/446",
     "description": "This mod provides the tools to both improve the standard terrain generation of the game, and override aspects of it with image maps, allowing precise control over height, biomes, location placement, and forest coverage.",
     "dependencies": [
-        "denikson-BepInExPack_Valheim-5.4.800"
+        "denikson-BepInExPack_Valheim-5.4.1500"
     ]
 }
