@@ -477,7 +477,6 @@
     </ItemGroup>
     <ItemGroup>
         <Compile Include="BetterContinents.BetterContinentsSettings.cs" />
-        <Compile Include="BetterContinents.ConsolePatch.cs" />
         <Compile Include="BetterContinents.cs" />
         <Compile Include="BetterContinents.WorldGeneratorPatch.cs" />
         <Compile Include="BetterContinents.WorldPatch.cs" />

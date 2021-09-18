@@ -26,8 +26,9 @@ namespace BetterContinents
 
         static DebugUtils()
         {
-            rootCommand = new Command("bc",  "Better Continents", "Better Continents command").Subcommands(bc =>
-            {
+            // ReSharper disable once ObjectCreationAsStatement
+            new Terminal.ConsoleCommand("bc", "Root Better Continents command", args => RunConsoleCommand(args.FullLine.Trim()), true, false, true);
+            
                 bc.AddCommand("info", "Dump Info", "print current settings to console", _ => {
                     BetterContinents.Settings.Dump(str => Console.instance.Print($"<size=15><color=silver>{str}</color></size>"));
                     Console.instance.Print($"<color=orange>NOTE: these settings don't map exactly to console param function or the config file, as some of them are derived.</color>");
@@ -639,7 +640,6 @@ namespace BetterContinents
                 //             });
                 //     });
                 // }
-            }).UIBackgroundColor(new Color32(0x46, 0x63, 0x65, 0x7f));
         }
         
         public static void RunConsoleCommand(string text)

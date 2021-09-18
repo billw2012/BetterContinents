@@ -214,6 +214,8 @@ namespace BetterContinents
 
             new Harmony("BetterContinents.Harmony").PatchAll();
             Log("Awake");
+            
+            DebugUtils.InitConsole();
 
             UI.Init();
         }
