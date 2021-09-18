@@ -17,8 +17,12 @@ namespace BetterContinents
             "StartTemple", "Eikthyrnir", "GDKing", "GoblinKing", "Bonemass", "Dragonqueen",
             "Vendor_BlackForest"
         };
-        static DebugUtils()
+
+        public static void InitConsole()
         {
+            // ReSharper disable once ObjectCreationAsStatement
+            new Terminal.ConsoleCommand("bc", "Root Better Continents command", args => RunConsoleCommand(args.FullLine.Trim()), true, false, true);
+            
             AddCommand("info", "print current settings to console", _ =>
             {
                 BetterContinents.Settings.Dump(str => Console.instance.Print($"<size=15><color=silver>{str}</color></size>"));
@@ -326,13 +330,13 @@ namespace BetterContinents
                 });
             });
         }
-
+        
         public static void RunConsoleCommand(string text)
         {
             rootCommand.Run(text);
         }
 
-        private static Command rootCommand = new Command("bc", "", "", null);
+        private static readonly Command rootCommand = new Command("bc", "", "", null);
 
         public static void AddCommand(string cmd, string desc, Action<string> action = null, Action<Command> configCmd = null)
         {
