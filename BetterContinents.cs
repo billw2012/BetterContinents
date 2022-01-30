@@ -1,5 +1,8 @@
 using System;
+using System.Collections;
 using System.Reflection;
+using System.Threading;
+using System.Threading.Tasks;
 using BepInEx;
 using BepInEx.Configuration;
 using HarmonyLib;
@@ -333,37 +336,61 @@ namespace BetterContinents
             [HarmonyPrefix, HarmonyPatch(nameof(Minimap.GenerateWorldMap))]
             private static bool GenerateWorldMapPrefix(Minimap __instance)
             {
-                GenerateWorldMapMT(__instance);
+                __instance.StartCoroutine(GenerateWorldMapMT(__instance));
                 return false;
             }
 
-            private static void GenerateWorldMapMT(Minimap __instance)
+            private static IEnumerator GenerateWorldMapMT(Minimap __instance)
             {
+                Log($"Generating minimap textures multi-threaded ...");
                 int halfSize = __instance.m_textureSize / 2;
                 float halfSizeF = __instance.m_pixelSize / 2f;
                 var mapPixels = new Color32[__instance.m_textureSize * __instance.m_textureSize];
                 var forestPixels = new Color32[__instance.m_textureSize * __instance.m_textureSize];
                 var heightPixels = new Color[__instance.m_textureSize * __instance.m_textureSize];
-                GameUtils.SimpleParallelFor(4, 0, __instance.m_textureSize, i =>
+
+                int progress = 0;
+                var task = Task.Run(() =>
                 {
-                    for (int j = 0; j < __instance.m_textureSize; j++)
+                    GameUtils.SimpleParallelFor(4, 0, __instance.m_textureSize, i =>
                     {
-                        float wx = (float) (j - halfSize) * __instance.m_pixelSize + halfSizeF;
-                        float wy = (float) (i - halfSize) * __instance.m_pixelSize + halfSizeF;
-                        var biome = WorldGenerator.instance.GetBiome(wx, wy);
-                        float biomeHeight = WorldGenerator.instance.GetBiomeHeight(biome, wx, wy);
-                        mapPixels[i * __instance.m_textureSize + j] = __instance.GetPixelColor(biome);
-                        forestPixels[i * __instance.m_textureSize + j] = __instance.GetMaskColor(wx, wy, biomeHeight, biome);
-                        heightPixels[i * __instance.m_textureSize + j] = new Color(biomeHeight, 0f, 0f);
-                    }
+                        for (int j = 0; j < __instance.m_textureSize; j++)
+                        {
+                            float wx = (float)(j - halfSize) * __instance.m_pixelSize + halfSizeF;
+                            float wy = (float)(i - halfSize) * __instance.m_pixelSize + halfSizeF;
+                            var biome = WorldGenerator.instance.GetBiome(wx, wy);
+                            float biomeHeight = WorldGenerator.instance.GetBiomeHeight(biome, wx, wy);
+                            mapPixels[i * __instance.m_textureSize + j] = __instance.GetPixelColor(biome);
+                            forestPixels[i * __instance.m_textureSize + j] =
+                                __instance.GetMaskColor(wx, wy, biomeHeight, biome);
+                            heightPixels[i * __instance.m_textureSize + j] = new Color(biomeHeight, 0f, 0f);
+                            Interlocked.Increment(ref progress);
+                        }
+                    });
                 });
-                
+
+                try
+                {
+                    UI.Add("GeneratingMinimap", () =>
+                    {
+                        int percentProgress = (int)(100 * ((float)progress / (__instance.m_textureSize * __instance.m_textureSize)));
+                        UI.DisplayMessage($"Better Continents: generating minimap {percentProgress}% ...");
+                    });
+                    yield return new WaitUntil(() => task.IsCompleted);
+                }
+                finally
+                {
+                    UI.Remove("GeneratingMinimap");
+                }
+
                 __instance.m_forestMaskTexture.SetPixels32(forestPixels);
                 __instance.m_forestMaskTexture.Apply();
                 __instance.m_mapTexture.SetPixels32(mapPixels);
                 __instance.m_mapTexture.Apply();
                 __instance.m_heightTexture.SetPixels(heightPixels);
                 __instance.m_heightTexture.Apply();
+                
+                Log($"Finished generating minimap textures multi-threaded ...");
             }
         }
         
