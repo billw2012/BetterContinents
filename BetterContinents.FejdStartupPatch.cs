@@ -23,6 +23,7 @@ namespace BetterContinents
             [HarmonyPostfix, HarmonyPatch("Start")]
             private static void StartPostfix(FejdStartup __instance)
             {
+                Log("Start postfix");
                 presets.InitUI(__instance);
                 
                 // Code from before I used an assetbundle instead...

@@ -28,10 +28,14 @@ namespace BetterContinents
         {
             // ReSharper disable once ObjectCreationAsStatement
             new Terminal.ConsoleCommand("bc", "Root Better Continents command", args => RunConsoleCommand(args.FullLine.Trim()), true, false, true);
-            
-                bc.AddCommand("info", "Dump Info", "print current settings to console", _ => {
-                    BetterContinents.Settings.Dump(str => Console.instance.Print($"<size=15><color=silver>{str}</color></size>"));
-                    Console.instance.Print($"<color=orange>NOTE: these settings don't map exactly to console param function or the config file, as some of them are derived.</color>");
+            rootCommand = new Command("bc", "Better Continents", "Better Continents command").Subcommands(bc =>
+            {
+                bc.AddCommand("info", "Dump Info", "print current settings to console", _ =>
+                {
+                    BetterContinents.Settings.Dump(str =>
+                        Console.instance.Print($"<size=15><color=silver>{str}</color></size>"));
+                    Console.instance.Print(
+                        $"<color=orange>NOTE: these settings don't map exactly to console param function or the config file, as some of them are derived.</color>");
                 });
 
                 if (BetterContinents.Settings.AnyImageMap)
@@ -71,7 +75,8 @@ namespace BetterContinents
                     });
                 }
 
-                bc.AddCommand("locs", "Dump locations", "print all location spawn instance counts to the console", _ => {
+                bc.AddCommand("locs", "Dump locations", "print all location spawn instance counts to the console", _ =>
+                {
                     var locationInstances = GameUtils.GetLocationInstances();
 
                     var locationTypes = locationInstances.Values
@@ -81,6 +86,7 @@ namespace BetterContinents
                     {
                         Console.instance.Print($"Placed {lg.Value.Count} {lg.Key} locations");
                     }
+
                     foreach (var boss in Bosses)
                     {
                         if (!locationTypes.ContainsKey(boss))
@@ -89,23 +95,28 @@ namespace BetterContinents
                         }
                     }
                 });
-                bc.AddCommand("bosses", "Show bosses", "show pins for bosses, start temple and trader", _ => GameUtils.ShowOnMap(Bosses));
-                bc.AddCommand("show", "Show locations", "pin locations matching optional filter on the map", args => {
+                bc.AddCommand("bosses", "Show bosses", "show pins for bosses, start temple and trader",
+                    _ => GameUtils.ShowOnMap(Bosses));
+                bc.AddCommand("show", "Show locations", "pin locations matching optional filter on the map", args =>
+                {
                     GameUtils.ShowOnMap((args ?? "")
-                        .Split(new[] {' '}, StringSplitOptions.RemoveEmptyEntries)
+                        .Split(new[] { ' ' }, StringSplitOptions.RemoveEmptyEntries)
                         .Select(f => f.Trim())
                         .ToArray());
                 });
-                bc.AddCommand("hide", "Hide locations", "remove pins matching optional filter from the map", args => {
+                bc.AddCommand("hide", "Hide locations", "remove pins matching optional filter from the map", args =>
+                {
                     GameUtils.HideOnMap((args ?? "")
-                        .Split(new[] {' '}, StringSplitOptions.RemoveEmptyEntries)
+                        .Split(new[] { ' ' }, StringSplitOptions.RemoveEmptyEntries)
                         .Select(f => f.Trim())
                         .ToArray());
                 });
-                bc.AddValue<bool>("clouds", "Clouds", "if the map clouds are enabled", 
+                bc.AddValue<bool>("clouds", "Clouds", "if the map clouds are enabled",
                     defaultValue: true,
-                    getter: () => Minimap.instance.m_mapImageLarge.material.GetTexture("_CloudTex") != TransparentTexture,
-                    setter: enable => {
+                    getter: () =>
+                        Minimap.instance.m_mapImageLarge.material.GetTexture("_CloudTex") != TransparentTexture,
+                    setter: enable =>
+                    {
                         var mat = Minimap.instance.m_mapImageLarge.material;
                         CloudTexture ??= mat.GetTexture("_CloudTex");
                         TransparentTexture ??= UI.CreateFillTexture(new Color32(0, 0, 0, 0));
@@ -113,44 +124,54 @@ namespace BetterContinents
                     });
                 bc.AddValue<int>("mapds", "Minimap downscaling", "set minimap downscaling factor (for faster updates)",
                     defaultValue: 2,
-                    list: new [] {0, 1, 2, 3},
+                    list: new[] { 0, 1, 2, 3 },
                     getter: () => GameUtils.MinimapDownscalingPower,
-                    setter: val => {
+                    setter: val =>
+                    {
                         GameUtils.MinimapDownscalingPower = Mathf.Clamp(val, 0, 3);
                         GameUtils.FastMinimapRegen();
                     });
-                bc.AddCommand("refresh", "Refresh", "resets all vegetation and locations (done automatically on every change)", 
+                bc.AddCommand("refresh", "Refresh",
+                    "resets all vegetation and locations (done automatically on every change)",
                     _ => GameUtils.Refresh());
-                bc.AddCommand("despawnall", "Despawn all", "despawn everything", 
+                bc.AddCommand("despawnall", "Despawn all", "despawn everything",
                     _ => GameUtils.DespawnAll());
-                bc.AddCommand("resetall", "Reset all", "reset everything (WARNING: this deletes everything that has been build in the map!)", _ => {
-                    GameUtils.ResetAll();
-                    Console.instance.Print($"<color=orange>All constructions removed!</color>");
-                });
-                bc.AddCommand("regenloc", "Regenerate locs", "regenerate all locations", _ => {
+                bc.AddCommand("resetall", "Reset all",
+                    "reset everything (WARNING: this deletes everything that has been build in the map!)", _ =>
+                    {
+                        GameUtils.ResetAll();
+                        Console.instance.Print($"<color=orange>All constructions removed!</color>");
+                    });
+                bc.AddCommand("regenloc", "Regenerate locs", "regenerate all locations", _ =>
+                {
                     bool prevLocSetting = BetterContinents.ConfigDebugSkipDefaultLocationPlacement.Value;
                     BetterContinents.ConfigDebugSkipDefaultLocationPlacement.Value = false;
                     GameUtils.RegenerateLocations();
                     BetterContinents.ConfigDebugSkipDefaultLocationPlacement.Value = prevLocSetting;
                     Console.instance.Print($"<color=orange>All locations regenerated!</color>");
                 });
-                bc.AddCommand("scr", "Save map screenshot", "save the minimap to a png, optionally pass resolution, default is 2048", arg => {
-                    var filename = DateTime.Now.ToString("yyyy-dd-M-HH-mm-ss") + ".png";
-                    var screenshotDir = Path.Combine(Utils.GetSaveDataPath(), "BetterContinents", WorldGenerator.instance.m_world.m_name);
-                    var path = Path.Combine(screenshotDir, filename);
-                    int size = string.IsNullOrEmpty(arg) ? 2048 : int.Parse(arg);
-                    GameUtils.SaveMinimap(path, size);
-                    Console.instance.Print($"Map screenshot saved to {path}, size {size} x {size}");
-                });
-                bc.AddCommand("savepreset", "Save preset", "save current world settings as a preset, including a thumbnail, pass preset name as argument", 
+                bc.AddCommand("scr", "Save map screenshot",
+                    "save the minimap to a png, optionally pass resolution, default is 2048", arg =>
+                    {
+                        var filename = DateTime.Now.ToString("yyyy-dd-M-HH-mm-ss") + ".png";
+                        var screenshotDir = Path.Combine(Utils.GetSaveDataPath(), "BetterContinents",
+                            WorldGenerator.instance.m_world.m_name);
+                        var path = Path.Combine(screenshotDir, filename);
+                        int size = string.IsNullOrEmpty(arg) ? 2048 : int.Parse(arg);
+                        GameUtils.SaveMinimap(path, size);
+                        Console.instance.Print($"Map screenshot saved to {path}, size {size} x {size}");
+                    });
+                bc.AddCommand("savepreset", "Save preset",
+                    "save current world settings as a preset, including a thumbnail, pass preset name as argument",
                     arg =>
                     {
                         arg ??= WorldGenerator.instance.m_world.m_name;
                         Presets.Save(BetterContinents.Settings, arg);
                     });
-                
-                bc.AddGroup("g", "Global", "global settings, get more info with 'bc g help'", 
-                    group => { 
+
+                bc.AddGroup("g", "Global", "global settings, get more info with 'bc g help'",
+                    group =>
+                    {
                         // AddHeightmapValue(subcmd, "cs", "continent size", 0, new AcceptableValueRange<float>(0, 1), 
                         //     value => BetterContinents.Settings.ContinentSize = value,
                         //     () => BetterContinents.Settings.ContinentSize);
@@ -171,17 +192,22 @@ namespace BetterContinents
                             defaultValue: true,
                             setter: SetHeightmapValue<bool>(value => BetterContinents.Settings.MapEdgeDropoff = value),
                             getter: () => BetterContinents.Settings.MapEdgeDropoff);
-                        group.AddValue<bool>("mc", "Allow mountains in center", "whether the center of the map (usually the spawn area), is flattened",
+                        group.AddValue<bool>("mc", "Allow mountains in center",
+                            "whether the center of the map (usually the spawn area), is flattened",
                             defaultValue: false,
-                            setter: SetHeightmapValue<bool>(value => BetterContinents.Settings.MountainsAllowedAtCenter = value),
+                            setter: SetHeightmapValue<bool>(value =>
+                                BetterContinents.Settings.MountainsAllowedAtCenter = value),
                             getter: () => BetterContinents.Settings.MountainsAllowedAtCenter);
                     });
 
                 bc.AddGroup("h", "Heightmap", "heightmap settings, get more info with 'bc param h help'",
-                    group => { 
-                        group.AddValue<string>("fn", "Heightmap filename", "set heightmap filename (full path including filename, or nothing to disable)",
+                    group =>
+                    {
+                        group.AddValue<string>("fn", "Heightmap filename",
+                            "set heightmap filename (full path including filename, or nothing to disable)",
                             defaultValue: string.Empty,
-                            setter: SetHeightmapValue<string>(path => {
+                            setter: SetHeightmapValue<string>(path =>
+                            {
                                 if (string.IsNullOrEmpty(path))
                                 {
                                     BetterContinents.Settings.DisableHeightmap();
@@ -193,32 +219,38 @@ namespace BetterContinents
                                     BetterContinents.Settings.SetHeightmapPath(path);
                             }),
                             getter: () => BetterContinents.Settings.GetHeightmapPath());
-                        group.AddValue<bool>("ov", "Heightmap Override All", "causes the terrain to conform to the heightmap, ignoring biome specific variance",
+                        group.AddValue<bool>("ov", "Heightmap Override All",
+                            "causes the terrain to conform to the heightmap, ignoring biome specific variance",
                             defaultValue: false,
-                            setter: SetHeightmapValue<bool>(value => BetterContinents.Settings.HeightmapOverrideAll = value),
+                            setter: SetHeightmapValue<bool>(value =>
+                                BetterContinents.Settings.HeightmapOverrideAll = value),
                             getter: () => BetterContinents.Settings.HeightmapOverrideAll);
                         group.AddValue<float>("am", "Heightmap Amount", "heightmap amount",
-                            defaultValue: 1f, minValue: 0, maxValue: 5, 
-                            setter: SetHeightmapValue<float>(value => BetterContinents.Settings.HeightmapAmount = value),
+                            defaultValue: 1f, minValue: 0, maxValue: 5,
+                            setter: SetHeightmapValue<float>(value =>
+                                BetterContinents.Settings.HeightmapAmount = value),
                             getter: () => BetterContinents.Settings.HeightmapAmount);
-                        group.AddValue<float>("bl", "Heightmap Blend", "heightmap blend", 
-                            defaultValue: 1f, minValue: 0, maxValue: 1,   
+                        group.AddValue<float>("bl", "Heightmap Blend", "heightmap blend",
+                            defaultValue: 1f, minValue: 0, maxValue: 1,
                             setter: SetHeightmapValue<float>(value => BetterContinents.Settings.HeightmapBlend = value),
                             getter: () => BetterContinents.Settings.HeightmapBlend);
                         group.AddValue<float>("ad", "Heightmap Add", "heightmap add",
-                            defaultValue: 0f, minValue: -1, maxValue: 1, 
+                            defaultValue: 0f, minValue: -1, maxValue: 1,
                             setter: SetHeightmapValue<float>(value => BetterContinents.Settings.HeightmapAdd = value),
                             getter: () => BetterContinents.Settings.HeightmapAdd);
                         group.AddValue<float>("ma", "Heightmap Mask", "heightmap mask",
-                            defaultValue: 0f, minValue: 0, maxValue: 1, 
+                            defaultValue: 0f, minValue: 0, maxValue: 1,
                             setter: SetHeightmapValue<float>(value => BetterContinents.Settings.HeightmapMask = value),
                             getter: () => BetterContinents.Settings.HeightmapMask);
                     });
 
-                bc.AddGroup("r", "Roughmap", "roughmap settings, get more info with 'bc param r help'", group => {
-                    group.AddValue<string>("fn", "Roughmap Filename", "set roughmap filename (full path including filename, or nothing to disable)",
+                bc.AddGroup("r", "Roughmap", "roughmap settings, get more info with 'bc param r help'", group =>
+                {
+                    group.AddValue<string>("fn", "Roughmap Filename",
+                        "set roughmap filename (full path including filename, or nothing to disable)",
                         defaultValue: string.Empty,
-                        setter: SetHeightmapValue<string>(path => {
+                        setter: SetHeightmapValue<string>(path =>
+                        {
                             if (string.IsNullOrEmpty(path))
                             {
                                 BetterContinents.Settings.DisableRoughmap();
@@ -231,14 +263,17 @@ namespace BetterContinents
                         }),
                         getter: () => BetterContinents.Settings.GetRoughmapPath());
                     group.AddValue<float>("bl", "Roughmap Blend", "roughmap blend",
-                        defaultValue: 1f, minValue: 0, maxValue: 1,   
+                        defaultValue: 1f, minValue: 0, maxValue: 1,
                         setter: SetHeightmapValue<float>(value => BetterContinents.Settings.RoughmapBlend = value),
                         getter: () => BetterContinents.Settings.RoughmapBlend);
                 });
-                bc.AddGroup("b", "Biomemap", "biomemap settings, get more info with 'bc param b help'", group => {
-                    group.AddValue<string>("fn", "Biomemap Filename", "set biomemap filename (full path including filename, or nothing to disable)",
+                bc.AddGroup("b", "Biomemap", "biomemap settings, get more info with 'bc param b help'", group =>
+                {
+                    group.AddValue<string>("fn", "Biomemap Filename",
+                        "set biomemap filename (full path including filename, or nothing to disable)",
                         defaultValue: string.Empty,
-                        setter: SetHeightmapValue<string>(path => {
+                        setter: SetHeightmapValue<string>(path =>
+                        {
                             if (string.IsNullOrEmpty(path))
                             {
                                 BetterContinents.Settings.DisableBiomemap();
@@ -251,44 +286,54 @@ namespace BetterContinents
                         }),
                         getter: () => BetterContinents.Settings.GetBiomemapPath());
                 });
-                bc.AddGroup("s", "Spawnmap", "spawnmap settings, get more info with 'bc param s help'", group => {
-                    group.AddValue<string>("fn", "Spawnmap Filename", "set spawnmap filename (full path including filename, or nothing to disable)",
+                bc.AddGroup("s", "Spawnmap", "spawnmap settings, get more info with 'bc param s help'", group =>
+                {
+                    group.AddValue<string>("fn", "Spawnmap Filename",
+                        "set spawnmap filename (full path including filename, or nothing to disable)",
                         defaultValue: string.Empty,
-                        setter: SetHeightmapValue<string>(path => {
+                        setter: SetHeightmapValue<string>(path =>
+                        {
                             if (string.IsNullOrEmpty(path))
                             {
                                 BetterContinents.Settings.DisableSpawnmap();
                                 Console.instance.Print($"<color=orange>Spawnmap disabled!</color>");
-                                Console.instance.Print($"<color=orange>INFO: Use 'bc regenloc' to update the location spawns in the world</color>");
+                                Console.instance.Print(
+                                    $"<color=orange>INFO: Use 'bc regenloc' to update the location spawns in the world</color>");
                             }
                             else if (!File.Exists(BetterContinents.CleanPath(path)))
                                 Console.instance.Print($"<color=red>ERROR: {path} doesn't exist</color>");
                             else
                             {
                                 BetterContinents.Settings.SetSpawnmapPath(path);
-                                Console.instance.Print($"<color=orange>INFO: Use 'bc regenloc' to update the location spawns in the world</color>");
+                                Console.instance.Print(
+                                    $"<color=orange>INFO: Use 'bc regenloc' to update the location spawns in the world</color>");
                             }
                         }),
                         getter: () => BetterContinents.Settings.GetSpawnmapPath());
                 });
-                bc.AddGroup("fo", "Forest", "forest settings, get more info with 'bc param fo help'", group => {
+                bc.AddGroup("fo", "Forest", "forest settings, get more info with 'bc param fo help'", group =>
+                {
                     group.AddValue<float>("sc", "Forest Scale", "forest scale",
                         defaultValue: 0.5f, minValue: 0f, maxValue: 1f,
-                        setter: SetHeightmapValue<float>(value => BetterContinents.Settings.ForestScaleFactor = value), 
+                        setter: SetHeightmapValue<float>(value => BetterContinents.Settings.ForestScaleFactor = value),
                         getter: () => BetterContinents.Settings.ForestScaleFactor);
                     group.AddValue<float>("am", "Forest Amount", "forest amount",
                         defaultValue: 0.5f, minValue: 0f, maxValue: 1f,
-                        setter: SetHeightmapValue<float>(value => BetterContinents.Settings.ForestAmount = value), 
+                        setter: SetHeightmapValue<float>(value => BetterContinents.Settings.ForestAmount = value),
                         getter: () => BetterContinents.Settings.ForestAmount);
                     group.AddValue<bool>("ffo", "Forest Factor Override All", "forest factor override all trees",
-                        setter: SetHeightmapValue<bool>(value => {
+                        setter: SetHeightmapValue<bool>(value =>
+                        {
                             BetterContinents.Settings.ForestFactorOverrideAllTrees = value;
-                            Console.instance.Print("<color=orange>NOTE: You need to reload the world to apply this change to the forest factor override!</color>");
+                            Console.instance.Print(
+                                "<color=orange>NOTE: You need to reload the world to apply this change to the forest factor override!</color>");
                         }),
                         getter: () => BetterContinents.Settings.ForestFactorOverrideAllTrees);
-                    group.AddValue<string>("fn", "Forestmap Filename", "set forestmap filename (full path including filename, or nothing to disable)",
+                    group.AddValue<string>("fn", "Forestmap Filename",
+                        "set forestmap filename (full path including filename, or nothing to disable)",
                         defaultValue: string.Empty,
-                        setter: SetHeightmapValue<string>(path => {
+                        setter: SetHeightmapValue<string>(path =>
+                        {
                             if (string.IsNullOrEmpty(path))
                             {
                                 BetterContinents.Settings.DisableForestmap();
@@ -300,13 +345,13 @@ namespace BetterContinents
                                 BetterContinents.Settings.SetForestmapPath(path);
                         }),
                         getter: () => BetterContinents.Settings.GetForestmapPath());
-                    group.AddValue<float>("mu", "Forestmap Multiply", "forestmap multiply", 
+                    group.AddValue<float>("mu", "Forestmap Multiply", "forestmap multiply",
                         defaultValue: 1f, minValue: 0f, maxValue: 1f,
-                        setter: SetHeightmapValue<float>(value => BetterContinents.Settings.ForestmapMultiply = value), 
+                        setter: SetHeightmapValue<float>(value => BetterContinents.Settings.ForestmapMultiply = value),
                         getter: () => BetterContinents.Settings.ForestmapMultiply);
-                    group.AddValue<float>("mu", "Forestmap Add", "forestmap add",  
+                    group.AddValue<float>("mu", "Forestmap Add", "forestmap add",
                         defaultValue: 0f, minValue: 0f, maxValue: 1f,
-                        setter: SetHeightmapValue<float>(value => BetterContinents.Settings.ForestmapAdd = value), 
+                        setter: SetHeightmapValue<float>(value => BetterContinents.Settings.ForestmapAdd = value),
                         getter: () => BetterContinents.Settings.ForestmapAdd);
                 });
                 // bc.AddGroup("ri", "ridge settings, get more info with 'bc param ri help'", 
@@ -320,27 +365,35 @@ namespace BetterContinents
                 //     AddHeightmapSubcommand(subcmd, "bl", "ridge blend", "(between 0 and 1)", args => BetterContinents.Settings.RidgeBlend = float.Parse(args));
                 //     AddHeightmapSubcommand(subcmd, "am", "ridge amount", "(between 0 and 1)", args => BetterContinents.Settings.RidgeAmount = float.Parse(args));
                 // });
-                bc.AddGroup("st", "Start Position", "start position settings, get more info with 'bc param st help'", group => {
-                    group.AddValue<bool>("os", "Override Start Position", "override start position",
-                        setter: SetHeightmapValue<bool>(value => BetterContinents.Settings.OverrideStartPosition = value),
-                        getter: () => BetterContinents.Settings.OverrideStartPosition);
-                    group.AddValue<float>("x", "Start Position X", "start position x",
-                        defaultValue: 1f, minValue: 0f, maxValue: 1f,
-                        setter: SetHeightmapValue<float>(value => {
-                            BetterContinents.Settings.StartPositionX = value;
-                            Console.instance.Print($"<color=orange>INFO: Use 'bc regenloc' to update the location spawns in the world (including the start location)</color>");
-                        }), 
-                        getter: () => BetterContinents.Settings.StartPositionX);
-                    group.AddValue<float>("y", "Start Position Y", "start position y",  
-                        defaultValue: 1f, minValue: 0f, maxValue: 1f,
-                        setter: SetHeightmapValue<float>(value => {
-                            BetterContinents.Settings.StartPositionY = value;
-                            Console.instance.Print($"<color=orange>INFO: Use 'bc regenloc' to update the location spawns in the world (including the start location)</color>");
-                        }), 
-                        getter: () => BetterContinents.Settings.StartPositionY);
-                });
+                bc.AddGroup("st", "Start Position", "start position settings, get more info with 'bc param st help'",
+                    group =>
+                    {
+                        group.AddValue<bool>("os", "Override Start Position", "override start position",
+                            setter: SetHeightmapValue<bool>(value =>
+                                BetterContinents.Settings.OverrideStartPosition = value),
+                            getter: () => BetterContinents.Settings.OverrideStartPosition);
+                        group.AddValue<float>("x", "Start Position X", "start position x",
+                            defaultValue: 1f, minValue: 0f, maxValue: 1f,
+                            setter: SetHeightmapValue<float>(value =>
+                            {
+                                BetterContinents.Settings.StartPositionX = value;
+                                Console.instance.Print(
+                                    $"<color=orange>INFO: Use 'bc regenloc' to update the location spawns in the world (including the start location)</color>");
+                            }),
+                            getter: () => BetterContinents.Settings.StartPositionX);
+                        group.AddValue<float>("y", "Start Position Y", "start position y",
+                            defaultValue: 1f, minValue: 0f, maxValue: 1f,
+                            setter: SetHeightmapValue<float>(value =>
+                            {
+                                BetterContinents.Settings.StartPositionY = value;
+                                Console.instance.Print(
+                                    $"<color=orange>INFO: Use 'bc regenloc' to update the location spawns in the world (including the start location)</color>");
+                            }),
+                            getter: () => BetterContinents.Settings.StartPositionY);
+                    });
 
-                void AddNoiseCommands(Command.SubcommandBuilder group, NoiseStackSettings.NoiseSettings settings, bool isWarp = false, bool isMask = false)
+                void AddNoiseCommands(Command.SubcommandBuilder group, NoiseStackSettings.NoiseSettings settings,
+                    bool isWarp = false, bool isMask = false)
                 {
                     // Basic
                     group.AddValue("nt", "Noise Type", "noise type",
@@ -351,11 +404,13 @@ namespace BetterContinents
                         defaultValue: 0.0005f,
                         setter: SetHeightmapValue<float>(value => settings.Frequency = value),
                         getter: () => settings.Frequency);
-                    
+
                     // Fractal
-                    group.AddValue("ft", "Fractal Type", "fractal type", 
-                        defaultValue: isWarp? FastNoiseLite.FractalType.None : FastNoiseLite.FractalType.FBm, 
-                        list: isWarp? NoiseStackSettings.NoiseSettings.WarpFractalTypes : NoiseStackSettings.NoiseSettings.NonFractalTypes,
+                    group.AddValue("ft", "Fractal Type", "fractal type",
+                        defaultValue: isWarp ? FastNoiseLite.FractalType.None : FastNoiseLite.FractalType.FBm,
+                        list: isWarp
+                            ? NoiseStackSettings.NoiseSettings.WarpFractalTypes
+                            : NoiseStackSettings.NoiseSettings.NonFractalTypes,
                         setter: SetHeightmapValue<FastNoiseLite.FractalType>(value => settings.FractalType = value),
                         getter: () => settings.FractalType);
 
@@ -377,7 +432,7 @@ namespace BetterContinents
                             defaultValue: 0, minValue: -2, maxValue: 2,
                             setter: SetHeightmapValue<float>(value => settings.FractalWeightedStrength = value),
                             getter: () => settings.FractalWeightedStrength);
-                        if(settings.FractalType == FastNoiseLite.FractalType.PingPong)
+                        if (settings.FractalType == FastNoiseLite.FractalType.PingPong)
                         {
                             group.AddValue("ps", "Ping-Pong Strength", "ping-pong strength",
                                 defaultValue: 2, minValue: 0, maxValue: 10,
@@ -450,7 +505,8 @@ namespace BetterContinents
                 }
 
                 bc.AddGroup("hl", "Height Layer Settings", "height layer settings",
-                    hl  => {
+                    hl =>
+                    {
                         var baseNoise = BetterContinents.Settings.BaseHeightNoise;
                         // hl.AddValue<int>("n", "Number of Layers", "set number of layers",
                         //         defaultValue: 1, minValue: 1, maxValue: 5,
@@ -473,21 +529,29 @@ namespace BetterContinents
                         {
                             int index = i;
                             var noiseLayer = baseNoise.NoiseLayers[index];
-                            hl.AddGroup(index.ToString(),  $"layer {index}", $"layer {index} settings", l => {
-                                l.AddGroup("npreset", "Apply Noise Preset", "", preset => {
-                                    preset.AddCommand("def", "Default", "General noise layer", 
-                                        HeightmapCommand(_ => noiseLayer.noiseSettings = NoiseStackSettings.NoiseSettings.Default()));
-                                    preset.AddCommand("ri", "Ridges", "Ridged noise", 
-                                        HeightmapCommand(_ => noiseLayer.noiseSettings = NoiseStackSettings.NoiseSettings.Ridged()));
+                            hl.AddGroup(index.ToString(), $"layer {index}", $"layer {index} settings", l =>
+                            {
+                                l.AddGroup("npreset", "Apply Noise Preset", "", preset =>
+                                {
+                                    preset.AddCommand("def", "Default", "General noise layer",
+                                        HeightmapCommand(_ =>
+                                            noiseLayer.noiseSettings = NoiseStackSettings.NoiseSettings.Default()));
+                                    preset.AddCommand("ri", "Ridges", "Ridged noise",
+                                        HeightmapCommand(_ =>
+                                            noiseLayer.noiseSettings = NoiseStackSettings.NoiseSettings.Ridged()));
                                 });
-                                l.AddGroup("n", "Noise", $"layer {index} noise settings", nm 
-                                    => AddNoiseCommands(nm, noiseLayer.noiseSettings)).UIBackgroundColor(new Color32(0xCE, 0xB3, 0xAB, 0x7f));
-                                l.AddGroup("nw", "Noise Warp", $"layer {index} noise warp settings", nm => {
+                                l.AddGroup("n", "Noise", $"layer {index} noise settings", nm
+                                        => AddNoiseCommands(nm, noiseLayer.noiseSettings))
+                                    .UIBackgroundColor(new Color32(0xCE, 0xB3, 0xAB, 0x7f));
+                                l.AddGroup("nw", "Noise Warp", $"layer {index} noise warp settings", nm =>
+                                {
                                     nm.AddValue<bool>("on", "Enabled", $"layer {index} noise warp enabled",
                                         defaultValue: false,
-                                        setter: SetHeightmapValue<bool>(value => {
-                                            if(value && noiseLayer.noiseWarpSettings == null)
-                                                noiseLayer.noiseWarpSettings = NoiseStackSettings.NoiseSettings.DefaultWarp();
+                                        setter: SetHeightmapValue<bool>(value =>
+                                        {
+                                            if (value && noiseLayer.noiseWarpSettings == null)
+                                                noiseLayer.noiseWarpSettings =
+                                                    NoiseStackSettings.NoiseSettings.DefaultWarp();
                                             else if (!value)
                                                 noiseLayer.noiseWarpSettings = null;
                                         }),
@@ -502,29 +566,34 @@ namespace BetterContinents
 
                                 if (index > 0)
                                 {
-                                    l.AddGroup("mpreset", "Apply Mask Preset", "", preset => {
+                                    l.AddGroup("mpreset", "Apply Mask Preset", "", preset =>
+                                    {
                                         preset.AddCommand("def", "Default", "General mask layer", HeightmapCommand(_ =>
                                         {
                                             noiseLayer.maskSettings = NoiseStackSettings.NoiseSettings.Default();
                                             noiseLayer.maskSettings.SmoothThresholdStart = 0.6f;
                                             noiseLayer.maskSettings.SmoothThresholdEnd = 0.75f;
                                         }));
-                                        preset.AddCommand("25%", "25%", "About 25% coverage with smooth threshold", HeightmapCommand(_ =>
-                                        {
-                                            noiseLayer.maskSettings = NoiseStackSettings.NoiseSettings.Default();
-                                            noiseLayer.maskSettings.SmoothThresholdStart = 0.6f;
-                                            noiseLayer.maskSettings.SmoothThresholdEnd = 0.75f;
-                                        }));
-                                        preset.AddCommand("ri", "Ridges", "Warped with smooth threshold", HeightmapCommand(_ =>
-                                        {
-                                            noiseLayer.maskSettings = NoiseStackSettings.NoiseSettings.Default();
-                                            noiseLayer.maskSettings.SmoothThresholdStart = 0.6f;
-                                            noiseLayer.maskSettings.SmoothThresholdEnd = 0.75f;
-                                            noiseLayer.maskWarpSettings = NoiseStackSettings.NoiseSettings.DefaultWarp();
-                                        }));
+                                        preset.AddCommand("25%", "25%", "About 25% coverage with smooth threshold",
+                                            HeightmapCommand(_ =>
+                                            {
+                                                noiseLayer.maskSettings = NoiseStackSettings.NoiseSettings.Default();
+                                                noiseLayer.maskSettings.SmoothThresholdStart = 0.6f;
+                                                noiseLayer.maskSettings.SmoothThresholdEnd = 0.75f;
+                                            }));
+                                        preset.AddCommand("ri", "Ridges", "Warped with smooth threshold",
+                                            HeightmapCommand(_ =>
+                                            {
+                                                noiseLayer.maskSettings = NoiseStackSettings.NoiseSettings.Default();
+                                                noiseLayer.maskSettings.SmoothThresholdStart = 0.6f;
+                                                noiseLayer.maskSettings.SmoothThresholdEnd = 0.75f;
+                                                noiseLayer.maskWarpSettings =
+                                                    NoiseStackSettings.NoiseSettings.DefaultWarp();
+                                            }));
                                     });
 
-                                    l.AddGroup("m", "Mask", $"layer {index} mask settings", nm => {
+                                    l.AddGroup("m", "Mask", $"layer {index} mask settings", nm =>
+                                    {
                                         nm.AddValue<bool>("on", "Enabled", $"layer {index} mask enabled",
                                             defaultValue: false,
                                             setter: SetHeightmapValue<bool>(value =>
@@ -543,7 +612,8 @@ namespace BetterContinents
                                     }).UIBackgroundColor(new Color32(0xBA, 0xA5, 0xFF, 0x7f));
                                     if (noiseLayer.maskSettings != null)
                                     {
-                                        l.AddGroup("mw", "Mask", $"layer {index} mask warp settings", nm => {
+                                        l.AddGroup("mw", "Mask", $"layer {index} mask warp settings", nm =>
+                                        {
                                             nm.AddValue<bool>("on", "Enabled", $"layer {index} mask warp enabled",
                                                 defaultValue: false,
                                                 setter: SetHeightmapValue<bool>(value =>
@@ -566,24 +636,26 @@ namespace BetterContinents
                                     }
                                 }
 
-                                l.AddCommand("delete", "Delete Layer", "", 
+                                l.AddCommand("delete", "Delete Layer", "",
                                         HeightmapCommand(_ => baseNoise.NoiseLayers.Remove(noiseLayer)))
                                     .UIBackgroundColor(new Color(0.5f, 0.1f, 0.1f));
                                 if (index > 0 && index < baseNoise.NoiseLayers.Count - 1)
                                 {
-                                    l.AddCommand("down", "Move Down", "Swap this layer with the one below", HeightmapCommand(_ => {
-                                        var other = baseNoise.NoiseLayers[index + 1];
-                                        baseNoise.NoiseLayers[index + 1] = noiseLayer;
-                                        baseNoise.NoiseLayers[index] = other;
-                                    }));
+                                    l.AddCommand("down", "Move Down", "Swap this layer with the one below",
+                                        HeightmapCommand(_ =>
+                                        {
+                                            var other = baseNoise.NoiseLayers[index + 1];
+                                            baseNoise.NoiseLayers[index + 1] = noiseLayer;
+                                            baseNoise.NoiseLayers[index] = other;
+                                        }));
                                 }
                             });
                         }
-                        
+
                         hl.AddValue<int>(null, $"Final preview", "preview of final heightmap")
                             .CustomDrawer(_ => DrawNoisePreview(baseNoise.NoiseLayers.Count));
                     }).UIBackgroundColor(new Color32(0xB4, 0x9A, 0x67, 0x7f));
-                
+
                 // AddHeightmapSubcommand(command, "num", "height noise layer count", "(count from 0 to 4)", args => BetterContinents.Settings.BaseHeightNoise.SetNoiseLayerCount(int.Parse(args)));
                 // for (int i = 0; i < 4; i++)
                 // {
@@ -640,6 +712,7 @@ namespace BetterContinents
                 //             });
                 //     });
                 // }
+            });
         }
         
         public static void RunConsoleCommand(string text)

@@ -218,8 +218,6 @@ namespace BetterContinents
             new Harmony("BetterContinents.Harmony").PatchAll();
             Log("Awake");
             
-            DebugUtils.InitConsole();
-
             UI.Init();
         }
 
@@ -312,13 +310,13 @@ namespace BetterContinents
             }
 
             private static Heightmap.Biome ForestableBiomes =
-                Heightmap.Biome.Meadows |
-                Heightmap.Biome.Mistlands |
-                Heightmap.Biome.Mountain |
-                Heightmap.Biome.Plains |
-                Heightmap.Biome.Swamp |
-                Heightmap.Biome.BlackForest
-            ;
+                 Heightmap.Biome.Meadows |
+                 Heightmap.Biome.Mistlands |
+                 Heightmap.Biome.Mountain |
+                 Heightmap.Biome.Plains |
+                 Heightmap.Biome.Swamp |
+                 Heightmap.Biome.BlackForest
+             ;
 
             [HarmonyPrefix, HarmonyPatch(nameof(Minimap.GetMaskColor))]
             private static bool GetMaskColorPrefix(Minimap __instance, float wx, float wy, float height, Heightmap.Biome biome, ref Color __result, Color ___noForest, Color ___forest)

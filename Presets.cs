@@ -36,6 +36,7 @@ namespace BetterContinents
             if (assetBundle == null)
             {
                 assetBundle = GameUtils.GetAssetBundleFromResources("bcassets");
+                BetterContinents.Log("Loaded asset bundle");
             }
             
             logoIcon = assetBundle.LoadAsset<Texture2D>("Assets/logo256.png");
@@ -61,6 +62,8 @@ namespace BetterContinents
             });
             Refresh();
             UpdatePreview();
+            
+            BetterContinents.Log("Setup UI");
         }
 
         private void UpdatePreview()
