@@ -154,7 +154,7 @@ namespace BetterContinents
                     "save the minimap to a png, optionally pass resolution, default is 2048", arg =>
                     {
                         var filename = DateTime.Now.ToString("yyyy-dd-M-HH-mm-ss") + ".png";
-                        var screenshotDir = Path.Combine(Utils.GetSaveDataPath(), "BetterContinents",
+                        var screenshotDir = Path.Combine(Utils.GetSaveDataPath(FileHelpers.FileSource.Local), "BetterContinents",
                             WorldGenerator.instance.m_world.m_name);
                         var path = Path.Combine(screenshotDir, filename);
                         int size = string.IsNullOrEmpty(arg) ? 2048 : int.Parse(arg);
@@ -178,12 +178,13 @@ namespace BetterContinents
                         // AddHeightmapValue(subcmd, "ma", "mountains amount", 0.5f, new AcceptableValueRange<float>(0, 1),
                         //     value => BetterContinents.Settings.MountainsAmount = value,
                         //     () => BetterContinents.Settings.MountainsAmount);
-                        // AddHeightmapValue(subcmd, "sl", "sea level adjustment", 0.5f, new AcceptableValueRange<float>(0, 1),
-                        //     value => BetterContinents.Settings.SeaLevel = value,
-                        //     () => BetterContinents.Settings.SeaLevel);
                         // AddHeightmapValue(subcmd, "oc", "ocean channels", false, 
                         //     args => BetterContinents.Settings.OceanChannelsEnabled = int.Parse(args) != 0,
                         //     () => BetterContinents.Settings.OceanChannelsEnabled);
+                        group.AddValue<float>("sl", "Sea level adjustment", "sea level adjustment", 
+                            defaultValue: 0.5f, minValue: 0, maxValue: 1,
+                            setter: SetHeightmapValue<float>(value => BetterContinents.Settings.SeaLevel = value),
+                            getter: () => BetterContinents.Settings.SeaLevel);
                         group.AddValue<bool>("r", "Enable rivers", "whether rivers are enabled",
                             defaultValue: true,
                             setter: SetHeightmapValue<bool>(value => BetterContinents.Settings.RiversEnabled = value),
@@ -400,10 +401,14 @@ namespace BetterContinents
                         defaultValue: FastNoiseLite.NoiseType.OpenSimplex2,
                         setter: SetHeightmapValue<FastNoiseLite.NoiseType>(value => settings.NoiseType = value),
                         getter: () => settings.NoiseType);
-                    group.AddValue("fq", "Frequency", "frequency",
+                    group.AddValue("fq", "Frequency X", "frequency x",
                         defaultValue: 0.0005f,
                         setter: SetHeightmapValue<float>(value => settings.Frequency = value),
                         getter: () => settings.Frequency);
+                    group.AddValue("asp", "Aspect Ratio", "scales y dimension relative to x",
+                        defaultValue: 1,
+                        setter: SetHeightmapValue<float>(value => settings.Aspect = value),
+                        getter: () => settings.Aspect);
 
                     // Fractal
                     group.AddValue("ft", "Fractal Type", "fractal type",
@@ -478,30 +483,52 @@ namespace BetterContinents
                     group.AddValue("in", "Invert", "invert",
                         setter: SetHeightmapValue<bool>(value => settings.Invert = value),
                         getter: () => settings.Invert);
-                    group.AddValueNullable<float>("sts", "Smooth Threshold Start", "smooth threshold start",
-                        defaultValue: null, minValue: 0, maxValue: 1,
+                    
+                    group.AddValue("ust", "Use Smooth Threshold", "use smooth threshold",
+                        setter: SetHeightmapValue<bool>(value => settings.UseSmoothThreshold = value),
+                        getter: () => settings.UseSmoothThreshold);
+                    group.AddValue("sts", "Smooth Threshold Start", "smooth threshold start",
+                        defaultValue: 0, minValue: -1, maxValue: 1,
                         getter: () => settings.SmoothThresholdStart,
-                        setter: SetHeightmapValue<float?>(value => settings.SmoothThresholdStart = value));
-                    group.AddValueNullable<float>("ste", "Smooth Threshold End", "smooth threshold end",
-                        defaultValue: null, minValue: 0, maxValue: 1,
+                        setter: SetHeightmapValue<float>(value => settings.SmoothThresholdStart = value));
+                    group.AddValue("ste", "Smooth Threshold End", "smooth threshold end",
+                        defaultValue: 1, minValue: -1, maxValue: 1,
                         getter: () => settings.SmoothThresholdEnd,
-                        setter: SetHeightmapValue<float?>(value => settings.SmoothThresholdEnd = value));
-                    group.AddValueNullable<float>("th", "Threshold", "threshold",
-                        defaultValue: null, minValue: 0, maxValue: 1,
+                        setter: SetHeightmapValue<float>(value => settings.SmoothThresholdEnd = value));
+                    
+                    group.AddValue("uth", "Use Threshold", "use threshold",
+                        setter: SetHeightmapValue<bool>(value => settings.UseThreshold = value),
+                        getter: () => settings.UseThreshold);
+                    group.AddValue("th", "Threshold", "threshold",
+                        defaultValue: 0, minValue: 0, maxValue: 1,
                         getter: () => settings.Threshold,
-                        setter: SetHeightmapValue<float?>(value => settings.Threshold = value));
-                    group.AddValueNullable<float>("ras", "Range Start", "range start",
-                        defaultValue: null, minValue: 0, maxValue: 1,
+                        setter: SetHeightmapValue<float>(value => settings.Threshold = value));
+                    
+                    group.AddValue("ura", "Use Range", "use range",
+                        setter: SetHeightmapValue<bool>(value => settings.UseRange = value),
+                        getter: () => settings.UseRange);
+                    group.AddValue("ras", "Range Start", "range start",
+                        defaultValue: 0, minValue: -1, maxValue: 1,
                         getter: () => settings.RangeStart,
-                        setter: SetHeightmapValue<float?>(value => settings.RangeStart = value));
-                    group.AddValueNullable<float>("rae", "Range End", "range end",
-                        defaultValue: null, minValue: 0, maxValue: 1,
+                        setter: SetHeightmapValue<float>(value => settings.RangeStart = value));
+                    group.AddValue("rae", "Range End", "range end",
+                        defaultValue: 1, minValue: -1, maxValue: 1,
                         getter: () => settings.RangeEnd,
-                        setter: SetHeightmapValue<float?>(value => settings.RangeEnd = value));
-                    group.AddValueNullable<float>("op", "Opacity", "opacity",
-                        defaultValue: null, minValue: 0, maxValue: 1,
+                        setter: SetHeightmapValue<float>(value => settings.RangeEnd = value));
+                    
+                    group.AddValue("uop", "Use Opacity", "use opacity",
+                        setter: SetHeightmapValue<bool>(value => settings.UseOpacity = value),
+                        getter: () => settings.UseOpacity);
+                    group.AddValue("op", "Opacity", "opacity",
+                        defaultValue: 1, minValue: 0, maxValue: 1,
                         getter: () => settings.Threshold,
-                        setter: SetHeightmapValue<float?>(value => settings.Threshold = value));
+                        setter: SetHeightmapValue<float>(value => settings.Threshold = value));
+                    
+                    group.AddValue("blm", "Blend Mode", "how to apply this layer to the previous one",
+                        defaultValue: BlendOperations.BlendModeType.Overlay,
+                        setter: SetHeightmapValue<BlendOperations.BlendModeType>(value =>
+                            settings.BlendMode = value),
+                        getter: () => settings.BlendMode);
                 }
 
                 bc.AddGroup("hl", "Height Layer Settings", "height layer settings",
@@ -612,7 +639,7 @@ namespace BetterContinents
                                     }).UIBackgroundColor(new Color32(0xBA, 0xA5, 0xFF, 0x7f));
                                     if (noiseLayer.maskSettings != null)
                                     {
-                                        l.AddGroup("mw", "Mask", $"layer {index} mask warp settings", nm =>
+                                        l.AddGroup("mw", "Mask Warp", $"layer {index} mask warp settings", nm =>
                                         {
                                             nm.AddValue<bool>("on", "Enabled", $"layer {index} mask warp enabled",
                                                 defaultValue: false,

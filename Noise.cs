@@ -11,6 +11,9 @@ namespace BetterContinents
     {
         public class NoiseSettings
         {
+            // Add new properties at the end, and comment where new versions start
+            public const int LatestVersion = 1;
+            
             public static readonly FastNoiseLite.FractalType[] WarpFractalTypes = {
                 FastNoiseLite.FractalType.None,
                 FastNoiseLite.FractalType.DomainWarpIndependent,
@@ -24,9 +27,13 @@ namespace BetterContinents
                 FastNoiseLite.FractalType.PingPong,
             };
             
+            // Version 1
+            public int Version = LatestVersion;
+
             // Basic
             public FastNoiseLite.NoiseType NoiseType; // = FastNoiseLite.NoiseType.OpenSimplex2
             public float Frequency; // = 0.0005f
+            public float Aspect; // = 1
             
             // Fractal settings
             public FastNoiseLite.FractalType FractalType; // = FastNoiseLite.FractalType.FBm
@@ -47,26 +54,31 @@ namespace BetterContinents
             
             // Filters
             public bool Invert;
+
+            public bool UseSmoothThreshold;
+            public float SmoothThresholdStart;
+            public float SmoothThresholdEnd = 1;
             
-            public float? SmoothThresholdStart;
-            public float? SmoothThresholdEnd;
+            public bool UseThreshold;
+            public float Threshold;
             
-            public float? Threshold;
+            public bool UseRange;
+            public float RangeStart; 
+            public float RangeEnd = 1;
             
-            public float? RangeStart; 
-            public float? RangeEnd;
-            
-            public float? Opacity;
+            public bool UseOpacity;
+            public float Opacity = 1;
 
             // Disabled, not sure how this applies...
             // public float? FillOpacity; // Applies to ColorBurn, LinearBurn, ColorDodge, LinearDodge, VividLight, LinearLight, HardMix, and Difference.
-            public BlendOperations.BlendModeType BlendMode;
+            public BlendOperations.BlendModeType BlendMode = BlendOperations.BlendModeType.Normal;
 
             public static NoiseSettings Default() =>
                 new ()
                 {
                     NoiseType = FastNoiseLite.NoiseType.OpenSimplex2,
                     Frequency = 0.0005f,
+                    Aspect = 1,
                     FractalType = FastNoiseLite.FractalType.FBm,
                     FractalOctaves = 7,
                     FractalLacunarity = 2,
@@ -79,6 +91,7 @@ namespace BetterContinents
                 {
                     NoiseType = FastNoiseLite.NoiseType.OpenSimplex2,
                     Frequency = 0.0005f,
+                    Aspect = 1,
                     FractalType = FastNoiseLite.FractalType.Ridged,
                     FractalOctaves = 7,
                     FractalLacunarity = 2,
@@ -91,6 +104,7 @@ namespace BetterContinents
                 {
                     NoiseType = FastNoiseLite.NoiseType.OpenSimplex2,
                     Frequency = 0.0005f,
+                    Aspect = 1,
                     FractalType = FastNoiseLite.FractalType.DomainWarpIndependent,
                     FractalOctaves = 1,
                     FractalLacunarity = 2,
@@ -102,10 +116,11 @@ namespace BetterContinents
 
             public void Serialize(ZPackage pkg)
             {
-                void WriteOptionalSingle(float? value) => pkg.Write(value ?? float.NegativeInfinity);
-
+                pkg.Write(Version);
+                
                 pkg.Write((int)NoiseType);
                 pkg.Write(Frequency);
+                pkg.Write(Aspect);
                 
                 pkg.Write((int)FractalType);
                 pkg.Write(FractalOctaves);
@@ -122,30 +137,35 @@ namespace BetterContinents
                 pkg.Write(DomainWarpAmp);
                 
                 pkg.Write(Invert);
-                WriteOptionalSingle(SmoothThresholdStart);
-                WriteOptionalSingle(SmoothThresholdEnd);
-                WriteOptionalSingle(Threshold);
-                WriteOptionalSingle(RangeStart);
-                WriteOptionalSingle(RangeEnd);
                 
-                WriteOptionalSingle(Opacity);
+                pkg.Write(UseSmoothThreshold);
+                pkg.Write(SmoothThresholdStart);
+                pkg.Write(SmoothThresholdEnd);
+                
+                pkg.Write(UseThreshold);
+                pkg.Write(Threshold);
+                
+                pkg.Write(UseRange);
+                pkg.Write(RangeStart);
+                pkg.Write(RangeEnd);
+                
+                pkg.Write(UseOpacity);
+                pkg.Write(Opacity);
+                
                 pkg.Write((int)BlendMode);
             }
             
             public static NoiseSettings Deserialize(ZPackage pkg)
             {
-                float? ReadOptionalSingle()
-                {
-                    float v = pkg.ReadSingle();
-                    return float.IsNegativeInfinity(v) ? (float?)null : v;
-                }
-                
                 // Don't use object initializer, although it executes in lexical order, it isn't explicit in the spec
                 // ReSharper disable once UseObjectOrCollectionInitializer
                 var settings = new NoiseSettings();
                 
+                settings.Version = pkg.ReadInt();
+                
                 settings.NoiseType = (FastNoiseLite.NoiseType) pkg.ReadInt();
                 settings.Frequency = pkg.ReadSingle();
+                settings.Aspect = pkg.ReadSingle();
                 
                 settings.FractalType = (FastNoiseLite.FractalType) pkg.ReadInt();
                 settings.FractalOctaves = pkg.ReadInt();
@@ -162,13 +182,21 @@ namespace BetterContinents
                 settings.DomainWarpAmp = pkg.ReadSingle();
 
                 settings.Invert = pkg.ReadBool();
-                settings.SmoothThresholdStart = ReadOptionalSingle();
-                settings.SmoothThresholdEnd = ReadOptionalSingle();
-                settings.Threshold = ReadOptionalSingle();
-                settings.RangeStart = ReadOptionalSingle();
-                settings.RangeEnd = ReadOptionalSingle();
-
-                settings.Opacity = ReadOptionalSingle();
+                
+                settings.UseSmoothThreshold = pkg.ReadBool();
+                settings.SmoothThresholdStart = pkg.ReadSingle();
+                settings.SmoothThresholdEnd = pkg.ReadSingle();
+                
+                settings.UseThreshold = pkg.ReadBool();
+                settings.Threshold = pkg.ReadSingle();
+                
+                settings.UseRange = pkg.ReadBool();
+                settings.RangeStart = pkg.ReadSingle();
+                settings.RangeEnd = pkg.ReadSingle();
+                
+                settings.UseOpacity = pkg.ReadBool();
+                settings.Opacity = pkg.ReadSingle();
+                
                 settings.BlendMode = (BlendOperations.BlendModeType) pkg.ReadInt();
 
                 return settings;
@@ -177,6 +205,7 @@ namespace BetterContinents
             public FastNoiseLite CreateNoise(int seed)
             {
                 var noise = new FastNoiseLite(seed);
+
                 noise.SetNoiseType(NoiseType);
                 noise.SetFrequency(Frequency / BetterContinents.Settings.GlobalScale);
                 noise.SetFractalType(FractalType);
@@ -197,24 +226,25 @@ namespace BetterContinents
 
             public void Dump(Action<string> output)
             {
+                output($"version {Version}");
                 output(
-                    $"type {NoiseType}, freq {Frequency}, frac {FractalType}, octaves {FractalOctaves}, lac {FractalLacunarity}, gain {FractalGain}, w. str. {FractalWeightedStrength}, ping-ping str. {FractalPingPongStrength}");
+                    $"type {NoiseType}, freq {Frequency}, aspect {Aspect}, frac {FractalType}, octaves {FractalOctaves}, lac {FractalLacunarity}, gain {FractalGain}, w. str. {FractalWeightedStrength}, ping-ping str. {FractalPingPongStrength}");
                 output($"cell. dist. fn. {CellularDistanceFunction}, cell. ret. type {CellularReturnType}, cell jitt. {CellularJitter}");
                 output($"warp type {DomainWarpType}, warp amp {DomainWarpAmp}");
                 output($"invert {Invert}");
-                if (SmoothThresholdStart != null && SmoothThresholdEnd != null)
+                if (UseSmoothThreshold)
                 {
                     output($"smooth step {SmoothThresholdStart} - {SmoothThresholdEnd}");
                 }
-                if (Threshold != null)
+                if (UseThreshold)
                 {
                     output($"threshold {Threshold}");
                 }
-                if (RangeStart != null || RangeEnd != null)
+                if (UseRange)
                 {
-                    output($"range {RangeStart ?? 0} - {RangeEnd ?? 1}");
+                    output($"range {RangeStart} - {RangeEnd}");
                 }
-                if (Opacity != null)
+                if (UseOpacity)
                 {
                     output($"opacity {Opacity}");
                 }
@@ -223,8 +253,11 @@ namespace BetterContinents
 
             public void CopyFrom(NoiseSettings from)
             {
+                Version = from.Version;
+                
                 NoiseType = from.NoiseType; 
-                Frequency = from.Frequency; 
+                Frequency = from.Frequency;
+                Aspect = from.Aspect; 
                 
                 FractalType = from.FractalType; 
                 FractalOctaves = from.FractalOctaves; 
@@ -232,7 +265,6 @@ namespace BetterContinents
                 FractalGain = from.FractalGain; 
                 FractalWeightedStrength = from.FractalWeightedStrength; 
                 FractalPingPongStrength = from.FractalPingPongStrength; 
-
                 
                 CellularDistanceFunction = from.CellularDistanceFunction;
                 CellularReturnType = from.CellularReturnType;
@@ -242,15 +274,19 @@ namespace BetterContinents
                 DomainWarpAmp = from.DomainWarpAmp;
 
                 Invert = from.Invert;
-                
+
+                UseSmoothThreshold = from.UseSmoothThreshold;
                 SmoothThresholdStart = from.SmoothThresholdStart;
                 SmoothThresholdEnd = from.SmoothThresholdEnd;
-                
+
+                UseThreshold = from.UseThreshold;
                 Threshold = from.Threshold;
-                
+
+                UseRange = from.UseRange;
                 RangeStart = from.RangeStart; 
                 RangeEnd = from.RangeEnd;
-                
+
+                UseOpacity = from.UseOpacity;
                 Opacity = from.Opacity;
                 
                 BlendMode = from.BlendMode;
@@ -259,6 +295,10 @@ namespace BetterContinents
         
         public class NoiseLayer
         {
+            // Add new properties at the end, and comment where new versions start
+            public const int LatestVersion = 1;
+
+            public int Version = LatestVersion;
             public NoiseSettings noiseSettings = NoiseSettings.Default();
             public NoiseSettings noiseWarpSettings;
             public NoiseSettings maskSettings;
@@ -266,6 +306,7 @@ namespace BetterContinents
 
             public void Serialize(ZPackage pkg)
             {
+                pkg.Write(Version);
                 noiseSettings.Serialize(pkg);
                 pkg.Write(noiseWarpSettings != null);
                 noiseWarpSettings?.Serialize(pkg);
@@ -279,6 +320,7 @@ namespace BetterContinents
             {
                 // ReSharper disable once UseObjectOrCollectionInitializer
                 var noiseLayer = new NoiseLayer();
+                noiseLayer.Version = pkg.ReadInt();
                 noiseLayer.noiseSettings = NoiseSettings.Deserialize(pkg);
                 if(pkg.ReadBool())
                 {
@@ -297,6 +339,7 @@ namespace BetterContinents
 
             public void Dump(Action<string> output)
             {
+                output($"Version {Version}");
                 output($"Noise Settings:");
                 noiseSettings.Dump(str => output($"    {str}"));
                 if (noiseWarpSettings != null)
@@ -426,6 +469,8 @@ namespace BetterContinents
     
         public float GetNoise(float x, float y)
         {
+            y *= settings.Aspect;
+            
             warp?.DomainWarp(ref x, ref y);
             
             float normalizedNoise = (noise.GetNoise(x, y) + add) * mul;
@@ -434,17 +479,17 @@ namespace BetterContinents
             {
                 normalizedNoise = 1 - normalizedNoise;
             }
-            if (settings.SmoothThresholdStart != null && settings.SmoothThresholdEnd != null)
+            if (settings.UseSmoothThreshold)
             {
                 //normalizedNoise = Mathf.SmoothStep(settings.SmoothStepStart.Value, settings.SmoothStepEnd.Value, normalizedNoise);
-                normalizedNoise = Mathf.InverseLerp(settings.SmoothThresholdStart.Value, settings.SmoothThresholdEnd.Value, normalizedNoise);
+                normalizedNoise = Mathf.InverseLerp(settings.SmoothThresholdStart, settings.SmoothThresholdEnd, normalizedNoise);
             }
-            normalizedNoise = Mathf.Lerp(settings.RangeStart ?? 0, settings.RangeEnd ?? 1, normalizedNoise);
-            if (settings.Threshold != null)
+            normalizedNoise =settings.UseRange ? Mathf.Lerp(settings.RangeStart, settings.RangeEnd, normalizedNoise) : normalizedNoise;
+            if (settings.UseThreshold)
             {
                 normalizedNoise = normalizedNoise < settings.Threshold ? 0f : 1f;
             }
-            normalizedNoise *= (settings.Opacity ?? 1f);
+            normalizedNoise *= settings.UseOpacity ? settings.Opacity : 1f;
             
             return normalizedNoise;
         }

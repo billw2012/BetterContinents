@@ -111,7 +111,7 @@ namespace BetterContinents
 
             private static class WorldCache
             {
-                private static readonly string WorldCachePath = Path.Combine(Utils.GetSaveDataPath(), "BetterContinents", "cache");
+                private static readonly string WorldCachePath = Path.Combine(Utils.GetSaveDataPath(FileHelpers.FileSource.Local), "BetterContinents", "cache");
                 private static string GetCachePath(string id) => Path.Combine(WorldCachePath, id + ".bc");
                 
                 public static void Add(ZPackage package)

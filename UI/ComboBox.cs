@@ -109,7 +109,7 @@ namespace BetterContinents
                     GUI.enabled = true;
 
                     var scrpos = GUIUtility.ScreenToGUIPoint(location);
-                    var outerRectLocal = new Rect(scrpos.x, scrpos.y, outerRectScreen.width, outerRectScreen.height);
+                    var outerRectLocal = new Rect(scrpos.x, scrpos.y, outerRectScreen.width, Mathf.Min(120, outerRectScreen.height));
 
                     GUI.Box(outerRectLocal, GUIContent.none,
                         new GUIStyle { normal = new GUIStyleState { background = Texture2D.whiteTexture} });

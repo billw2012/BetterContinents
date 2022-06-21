@@ -10,7 +10,7 @@ namespace BetterContinents
 {
     public class Presets
     {
-        private static readonly string PresetsDir = Path.Combine(Utils.GetSaveDataPath(), "BetterContinents", "presets");
+        private static readonly string PresetsDir = Path.Combine(Utils.GetSaveDataPath(FileHelpers.FileSource.Local), "BetterContinents", "presets");
         private static AssetBundle assetBundle;
 
         private static bool DisabledPreset => BetterContinents.ConfigSelectedPreset.Value == Disabled;
@@ -82,7 +82,7 @@ namespace BetterContinents
                 else
                 {
                     previewPanel.SetActive(true);
-                    var configIconPath =
+                    string configIconPath =
                         Path.Combine(Path.GetDirectoryName(BetterContinents.ConfigSelectedPreset.Value),
                             BetterContinents.ConfigSelectedPreset.Value.UpTo(".") + ".png");
                     if (File.Exists(configIconPath))

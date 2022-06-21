@@ -67,7 +67,10 @@ namespace BetterContinents
 
             public static void ApplyNoiseSettings()
             {
-                BaseHeightNoise = new NoiseStack(currentSeed, Settings.BaseHeightNoise);
+                if (Settings.BaseHeightNoise != null)
+                {
+                    BaseHeightNoise = new NoiseStack(currentSeed, Settings.BaseHeightNoise);
+                }
             }
 
             // wx, wy are [-10500, 10500]
@@ -104,50 +107,52 @@ namespace BetterContinents
             private delegate float GetBaseHeightDelegate(WorldGenerator instance, float wx, float wy, bool menuTerrain);
             private static readonly GetBaseHeightDelegate GetBaseHeightMethod 
                 = DebugUtils.GetDelegate<GetBaseHeightDelegate>(typeof(WorldGenerator), nameof(WorldGenerator.GetBaseHeight));
-
-            [HarmonyPrefix, HarmonyPatch(nameof(WorldGenerator.GetBiomeHeight))]
-            private static bool GetBiomeHeightPrefix(WorldGenerator __instance, Heightmap.Biome biome, float wx, float wy, ref float __result, World ___m_world)
-            {
-                if (!Settings.EnabledForThisWorld || ___m_world.m_menu || Settings.Version <= 6)
-                {
-                    return true;
-                }
-
-                switch (biome)
-                {
-                    case Heightmap.Biome.Meadows: 
-                        __result = GetMeadowsHeight(__instance, wx, wy);
-                        break;
-                    case Heightmap.Biome.Mistlands: 
-                        __result = GetMistlandsHeight(__instance, wx, wy);
-                        break;
-                    case Heightmap.Biome.Mountain: 
-                        __result = GetMountainHeight(__instance, wx, wy);
-                        break;
-                    case Heightmap.Biome.Ocean: 
-                        __result = GetOceanHeight(__instance, wx, wy);
-                        break;
-                    case Heightmap.Biome.Plains: 
-                        __result = GetPlainsHeight(__instance, wx, wy);
-                        break;
-                    case Heightmap.Biome.Swamp: 
-                        __result = GetSwampHeight(__instance, wx, wy);
-                        break;
-                    case Heightmap.Biome.AshLands: 
-                        __result = GetAshLandsHeight(__instance, wx, wy);
-                        break;
-                    case Heightmap.Biome.BlackForest: 
-                        __result = GetBlackForestHeight(__instance, wx, wy);
-                        break;
-                    case Heightmap.Biome.DeepNorth: 
-                        __result = GetDeepNorthHeight(__instance, wx, wy);
-                        break;
-                }
-
-                __result *= 200f;
-
-                return false;
-            }
+            
+            // NOT IMPLEMENTED YET
+            //
+            // [HarmonyPrefix, HarmonyPatch(nameof(WorldGenerator.GetBiomeHeight))]
+            // private static bool GetBiomeHeightPrefix(WorldGenerator __instance, Heightmap.Biome biome, float wx, float wy, ref float __result, World ___m_world)
+            // {
+            //     if (!Settings.EnabledForThisWorld || ___m_world.m_menu || Settings.Version <= 6)
+            //     {
+            //         return true;
+            //     }
+            //
+            //     switch (biome)
+            //     {
+            //         case Heightmap.Biome.Meadows: 
+            //             __result = GetMeadowsHeight(__instance, wx, wy);
+            //             break;
+            //         case Heightmap.Biome.Mistlands: 
+            //             __result = GetMistlandsHeight(__instance, wx, wy);
+            //             break;
+            //         case Heightmap.Biome.Mountain: 
+            //             __result = GetMountainHeight(__instance, wx, wy);
+            //             break;
+            //         case Heightmap.Biome.Ocean: 
+            //             __result = GetOceanHeight(__instance, wx, wy);
+            //             break;
+            //         case Heightmap.Biome.Plains: 
+            //             __result = GetPlainsHeight(__instance, wx, wy);
+            //             break;
+            //         case Heightmap.Biome.Swamp: 
+            //             __result = GetSwampHeight(__instance, wx, wy);
+            //             break;
+            //         case Heightmap.Biome.AshLands: 
+            //             __result = GetAshLandsHeight(__instance, wx, wy);
+            //             break;
+            //         case Heightmap.Biome.BlackForest: 
+            //             __result = GetBlackForestHeight(__instance, wx, wy);
+            //             break;
+            //         case Heightmap.Biome.DeepNorth: 
+            //             __result = GetDeepNorthHeight(__instance, wx, wy);
+            //             break;
+            //     }
+            //
+            //     __result *= 200f;
+            //
+            //     return false;
+            // }
 
             [HarmonyPostfix, HarmonyPatch(nameof(WorldGenerator.GetBiomeHeight))]
             private static void GetBiomeHeightPostfix(WorldGenerator __instance, float wx, float wy, ref float __result, World ___m_world)
@@ -323,9 +328,8 @@ namespace BetterContinents
                 float mapX = NormalizedX(wx);
                 float mapY = NormalizedY(wy);
 
-                float baseHeight = BaseHeightNoise.Apply(wx, wy, 0f);
-                
-                float finalHeight = Settings.ApplyHeightmap(mapX, mapY, baseHeight);
+                float baseHeight = Settings.ApplyHeightmap(mapX, mapY, 0f);
+                float finalHeight = BaseHeightNoise.Apply(wx, wy, baseHeight);
                 finalHeight -= 0.15f; // Resulting in about 30% water coverage by default
                 finalHeight += Settings.SeaLevelAdjustment;
 
