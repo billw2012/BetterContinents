@@ -535,6 +535,10 @@ namespace BetterContinents
                     hl =>
                     {
                         var baseNoise = BetterContinents.Settings.BaseHeightNoise;
+                        if (baseNoise == null)
+                        {
+                            return;
+                        }
                         // hl.AddValue<int>("n", "Number of Layers", "set number of layers",
                         //         defaultValue: 1, minValue: 1, maxValue: 5,
                         //         getter: () => baseNoise.NoiseLayers.Count,

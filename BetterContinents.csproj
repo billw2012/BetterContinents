@@ -265,6 +265,14 @@
   <ItemGroup>
     <EmbeddedResource Include="assets\BCAssets\AssetBundles\StandaloneWindows\bcassets" />
     <Content Include=".gitignore" />
+    <EmbeddedResource Include="assets\BCAssets\Presets\Continents.BetterContinents" />
+    <EmbeddedResource Include="assets\BCAssets\Presets\Continents.png" />
+    <EmbeddedResource Include="assets\BCAssets\Presets\Pangaea.BetterContinents" />
+    <EmbeddedResource Include="assets\BCAssets\Presets\Pangaea.png" />
+    <EmbeddedResource Include="assets\BCAssets\Presets\Swirls.BetterContinents" />
+    <EmbeddedResource Include="assets\BCAssets\Presets\Swirls.png" />
+    <EmbeddedResource Include="assets\BCAssets\Presets\Vanillaish.BetterContinents" />
+    <EmbeddedResource Include="assets\BCAssets\Presets\Vanillaish.png" />
     <Content Include="FodyWeavers.xml" />
     <Content Include="Vegetation.txt" />
   </ItemGroup>

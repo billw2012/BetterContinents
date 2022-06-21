@@ -37,6 +37,8 @@ namespace BetterContinents
             {
                 assetBundle = GameUtils.GetAssetBundleFromResources("bcassets");
                 BetterContinents.Log("Loaded asset bundle");
+                
+                GameUtils.UnpackDirectoryFromResources("BetterContinents.assets.BCAssets.Presets", PresetsDir);
             }
             
             logoIcon = assetBundle.LoadAsset<Texture2D>("Assets/logo256.png");
@@ -102,19 +104,30 @@ namespace BetterContinents
         private void Refresh()
         {
             string NameFromPath(string path) => Path.GetFileName(path).UpTo(".").AddSpacesToWords();
+
+            try
+            {
+                Directory.CreateDirectory(PresetsDir);
+
+                presets = Directory
+                        .GetFiles(PresetsDir, "*.BetterContinents")
+                        .ToList()
+                    ;
+            }
+            catch (Exception ex)
+            {
+                BetterContinents.LogError($"Error while loading presets: {ex.Message}");
+            }
             
-            presets = Directory
-                    .GetFiles(PresetsDir, "*.BetterContinents")
-                    .ToList()
-                ;
             presets.Insert(0, Disabled);
             presets.Add(FromConfig);
-                    
+
             if (dropdown != null)
             {
                 dropdown.ClearOptions();
                 dropdown.AddOptions(presets.Select(NameFromPath).ToList());
-                int idx = presets.FindIndex(p => string.Equals(p, BetterContinents.ConfigSelectedPreset.Value, StringComparison.CurrentCultureIgnoreCase));
+                int idx = presets.FindIndex(p => string.Equals(p, BetterContinents.ConfigSelectedPreset.Value,
+                    StringComparison.CurrentCultureIgnoreCase));
                 if (idx != -1)
                 {
                     dropdown.SetValueWithoutNotify(idx);

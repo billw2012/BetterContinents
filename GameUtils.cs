@@ -298,17 +298,80 @@ namespace BetterContinents
                     });
             ResetLocPins();
         }
-        
-        public static AssetBundle GetAssetBundleFromResources(string fileName)
+
+        // Does NOT support sub directories in the resources...
+        public static void UnpackDirectoryFromResources(string resourceDirectory, string targetDirectory)
         {
             var execAssembly = Assembly.GetExecutingAssembly();
 
-            var resourceName = execAssembly.GetManifestResourceNames()
-                .Single(str => str.EndsWith(fileName));
-
-            using(var stream = execAssembly.GetManifestResourceStream(resourceName))
+            try
             {
+                Directory.CreateDirectory(targetDirectory);
+                
+                BetterContinents.Log($"Extracting all files from {resourceDirectory} to {targetDirectory}");
+
+                if (!resourceDirectory.EndsWith("."))
+                    resourceDirectory += ".";
+
+                foreach (string fullResourceName in execAssembly.GetManifestResourceNames()
+                             .Where(str => str.StartsWith(resourceDirectory)))
+                {
+                    string targetFileName =
+                        Path.Combine(targetDirectory, fullResourceName.Replace(resourceDirectory, ""));
+                    if (!File.Exists(targetFileName))
+                    {
+                        BetterContinents.Log($"Extracting {fullResourceName} to {targetFileName} ...");
+                        using var stream = execAssembly.GetManifestResourceStream(fullResourceName);
+                        using var targetStream = File.OpenWrite(targetFileName);
+                        stream?.CopyTo(targetStream);
+                    }
+                    else
+                    {
+                        BetterContinents.Log($"{targetFileName} already exists, skipping extraction");
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                BetterContinents.LogError($"Failed to unpack resource directory {resourceDirectory} to {targetDirectory}: {ex.Message}");
+            }
+        }
+        
+        // public static void UnpackFromResources(string partialResourceName, string targetFileName)
+        // {
+        //     var execAssembly = Assembly.GetExecutingAssembly();
+        //
+        //     try
+        //     {
+        //         string fullResourceName = execAssembly.GetManifestResourceNames()
+        //             .Single(str => str.EndsWith(partialResourceName));
+        //
+        //         using var stream = execAssembly.GetManifestResourceStream(fullResourceName);
+        //         Directory.CreateDirectory(Path.GetDirectoryName(targetFileName));
+        //         stream?.CopyTo(File.OpenWrite(targetFileName));
+        //     }
+        //     catch (Exception ex)
+        //     {
+        //         BetterContinents.LogError($"Failed to unpack resource {partialResourceName} to {targetFileName}: {ex.Message}");
+        //     }
+        // }
+        
+        public static AssetBundle GetAssetBundleFromResources(string partialResourceName)
+        {
+            var execAssembly = Assembly.GetExecutingAssembly();
+
+            try
+            {
+                string fullResourceName = execAssembly.GetManifestResourceNames()
+                    .Single(str => str.EndsWith(partialResourceName));
+                BetterContinents.Log($"Loading asset bundle {fullResourceName}");
+                using var stream = execAssembly.GetManifestResourceStream(fullResourceName);
                 return AssetBundle.LoadFromStream(stream);
+            }
+            catch(Exception ex)
+            {
+                BetterContinents.LogError($"Failed to get asset bundle {partialResourceName}: {ex.Message}");
+                return null;
             }
         }
 

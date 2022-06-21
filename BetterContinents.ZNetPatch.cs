@@ -63,12 +63,10 @@ namespace BetterContinents
                         var newSettings = BetterContinentsSettings.Load(world.GetMetaPath() + ".BetterContinents");
                         if (newSettings.WorldUId != world.m_uid)
                         {
-                            LogError($"ID in saved settings for {world.m_name} didn't match, mod is disabled for this World");
+                            Log($"ID in saved settings for {world.m_name} didn't match: old id is {newSettings.WorldUId}, new id will be {world.m_uid}. This is expected if you are creating a new world from a template. Otherwise it means the .BetterContinents file that has been loaded is from another world and could have bad consequences for your save!");
+                            newSettings.WorldUId = world.m_uid;
                         }
-                        else
-                        {
-                            Settings = newSettings;
-                        }
+                        Settings = newSettings;
                     }
                     catch
                     {
