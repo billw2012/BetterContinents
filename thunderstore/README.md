@@ -13,20 +13,19 @@ These generated worlds can be shared with others (who have this mod installed) b
 ---
 ## **Features**
 * Use image files as [base heightmap](https://billw2012.github.io/BetterContinents-Docs/settings/heightmap.html#heightmap-file) layer, [detail heightmap](https://billw2012.github.io/BetterContinents-Docs/settings/flatmap.html#flatmap-file) layer, and [biome specific heightmap](https://billw2012.github.io/BetterContinents-Docs/settings/roughmap.html#roughmap-file) layer, with blending options for each
+* A comprehensive layer based noise system based on [FastNoiseLite](https://github.com/Auburn/FastNoise), including support for any number of layers of noise with separate settings, each with its own distortion and mask
+* An in game UI for designing your world, with visualisation for the layer system, and fast updating of the terrain and map
+* An extensive console command system matching the UI, for those who prefer it
 * Use an [image file to specify biomes](https://billw2012.github.io/BetterContinents-Docs/settings/biomemap.html#biomemap-file)
 * Use an [image file to specify spawning positions](https://billw2012.github.io/BetterContinents-Docs/settings/spawnmap.html#spawnmap-file) for locations, including player start, bosses, and trader
 * Use an [image file to specify forest coverage](https://billw2012.github.io/BetterContinents-Docs/settings/forest.html#forestmap-file), including in [biomes that normally are totally forested](https://billw2012.github.io/BetterContinents-Docs/settings/forest.html#forest-factor-overrides-all-trees) (Swamp, Mistlands, Dark Forest, Mountains)
 * Change [global scale](https://billw2012.github.io/BetterContinents-Docs/settings/global.html#continent-size) – changes continent sizes
-* Adjust [mountains amount](https://billw2012.github.io/BetterContinents-Docs/settings/global.html#mountains-amount)
 * Adjust [sea level](https://billw2012.github.io/BetterContinents-Docs/settings/global.html#sea-level-adjustment)
 * Adjust [forest scaling](https://billw2012.github.io/BetterContinents-Docs/settings/forest.html#forest-scale) (how big the contiguous areas of forest/clearings are), and amount
 * Specify [starting position](https://billw2012.github.io/BetterContinents-Docs/settings/start-position.html) explicitly
-* Additional customizable [ridged heightmap layer](https://billw2012.github.io/BetterContinents-Docs/settings/ridges.html) gives more varied geography
 * Still allows loading vanilla maps, without needing to adjust any settings or disable the mod
 * Backwards compatible (since version 0.2) – worlds created with older versions 
 will still look the same when loaded with newer ones[*]Includes a debug mode to automatically enable cheats, reveal the full map, toggle 
 on vanilla debugmode, and various other things, for quicker testing[*]Allows skipping of default location placement for quick world generation
-* Has extensive console command list for adjusting all settings, and regenerating locations
 * Custom map update when using console commands allows changes to be seen in full in a matter of seconds
 * Export full map to png at any resolution
-
