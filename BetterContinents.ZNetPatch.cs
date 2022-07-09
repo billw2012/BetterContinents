@@ -58,9 +58,11 @@ namespace BetterContinents
                     Log($"Selected world {world.m_name}, applying settings");
 
                     // Load in our settings for this world
+                    string settingsPath = world.GetMetaPath() + BetterContinents.ConfigFileExtension;
                     try
                     {
-                        var newSettings = BetterContinentsSettings.Load(world.GetMetaPath() + ".BetterContinents");
+                        Log($"Attempting to load settings from {settingsPath}, applying settings");
+                        var newSettings = BetterContinentsSettings.Load(settingsPath);
                         if (newSettings.WorldUId != world.m_uid)
                         {
                             Log($"ID in saved settings for {world.m_name} didn't match: old id is {newSettings.WorldUId}, new id will be {world.m_uid}. This is expected if you are creating a new world from a template. Otherwise it means the .BetterContinents file that has been loaded is from another world and could have bad consequences for your save!");
@@ -70,7 +72,7 @@ namespace BetterContinents
                     }
                     catch
                     {
-                        Log($"Couldn't find loaded settings for world {world.m_name}, mod is disabled for this World");
+                        Log($"Couldn't find loaded settings for world {world.m_name} at {settingsPath}, mod is disabled for this World");
                         Settings = BetterContinentsSettings.Disabled(world.m_uid);
                     }
             
@@ -528,6 +530,21 @@ namespace BetterContinents
                 {
                     Log($"World doesn't use Better Continents, skipping version check and sync");
                     call_RPC_PeerInfo();
+                }
+            }
+
+            [HarmonyPrefix, HarmonyPatch(nameof(ZNet.SaveWorldThread))]
+            private static void SaveWorldThreadPrefix()
+            {
+                // If the save is being upgraded from Legacy then we need to backup the BC config file, in the same
+                // manner the other files are backed up. Any time later than this is too late, as the fileSource will
+                // have already been updated and we won't know it is legacy any more.
+                if (ZNet.m_world.m_fileSource == FileHelpers.FileSource.Legacy)
+                {
+                    Log($"[Saving][{ZNet.m_world.m_name}] Updating from legacy save");
+                    string bcConfigFile = ZNet.m_world.GetMetaPath() + BetterContinents.ConfigFileExtension;
+                    Log($"[Saving][{ZNet.m_world.m_name}] Backing up {bcConfigFile}");
+                    FileHelpers.MoveToBackup(ZNet.m_world.GetMetaPath() + BetterContinents.ConfigFileExtension);
                 }
             }
         }

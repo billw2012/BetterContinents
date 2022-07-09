@@ -163,14 +163,14 @@ namespace BetterContinents
             }
             catch(Exception ex)
             {
-                BetterContinents.Log((string) $"Couldn't load preset {BetterContinents.ConfigSelectedPreset.Value} ({ex.Message}), BC is disabled for this world!");
+                BetterContinents.Log($"Couldn't load preset {BetterContinents.ConfigSelectedPreset.Value} ({ex.Message}), BC is disabled for this world!");
                 return BetterContinents.BetterContinentsSettings.Disabled(worldId);
             }
         }
 
         public static void Save(BetterContinents.BetterContinentsSettings settings, string name)
         {
-            var path = Path.Combine(PresetsDir, name + ".BetterContinents");
+            var path = Path.Combine(PresetsDir, name + BetterContinents.ConfigFileExtension);
             if (File.Exists(path))
                 File.Move(path, path + ".old-" + DateTime.Now.ToString("yyyy-dd-M-HH-mm-ss"));
             settings.Save(path);

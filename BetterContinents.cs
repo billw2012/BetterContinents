@@ -61,6 +61,7 @@ namespace BetterContinents
         public static ConfigEntry<bool> ConfigExperimentalParallelChunksBuild;
 
         public const float WorldSize = 10500f;
+        public const string ConfigFileExtension = ".BetterContinents";
         private static readonly Vector2 Half = Vector2.one * 0.5f;
         private static float NormalizedX(float x) => x / (WorldSize * 2f) + 0.5f;
         private static float NormalizedY(float y) => y / (WorldSize * 2f) + 0.5f;
