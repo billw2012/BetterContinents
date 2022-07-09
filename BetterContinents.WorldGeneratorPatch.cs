@@ -487,14 +487,18 @@ namespace BetterContinents
                 return true;
             }
         }
-        
+
+        private static int patchBuildCount = 0;
         [HarmonyPostfix, HarmonyPatch(nameof(HeightmapBuilder.Build))]
         private static void BuildPostfix(Stopwatch __state)
         {
-            BetterContinents.Log(BetterContinents.ConfigExperimentalMultithreadedHeightmapBuild.Value
-                ? $"Heightmap Build MT {__state.ElapsedMilliseconds} ms"
-                : $"Heightmap Build Vanilla {__state.ElapsedMilliseconds} ms"
-            );
+            if (patchBuildCount++ % 20 == 0)
+            {
+                BetterContinents.Log(BetterContinents.ConfigExperimentalMultithreadedHeightmapBuild.Value
+                    ? $"Heightmap Build MT {__state.ElapsedMilliseconds} ms"
+                    : $"Heightmap Build Vanilla {__state.ElapsedMilliseconds} ms"
+                );
+            }
         }
         
         private delegate void BuildDelegate(HeightmapBuilder instance, HeightmapBuilder.HMBuildData data);
@@ -528,7 +532,7 @@ namespace BetterContinents
                         {
                             buildTimes.RemoveAt(0);
                         }
-                        BetterContinents.Log($"Average chunk build time with vanilla {buildTimes.Average()} ms");
+                        // BetterContinents.Log($"Average chunk build time with vanilla {buildTimes.Average()} ms");
                         
                         __instance.m_lock.WaitOne();
                         __instance.m_toBuild.Remove(hmbuildData);
@@ -564,7 +568,7 @@ namespace BetterContinents
                         {
                             buildTimes.RemoveAt(0);
                         }
-                        BetterContinents.Log($"Average chunk build time with MT {buildTimes.Average()} ms");
+                        // BetterContinents.Log($"Average chunk build time with MT {buildTimes.Average()} ms");
 
                         __instance.m_lock.WaitOne();
                         foreach (var bt in buildTasks)
