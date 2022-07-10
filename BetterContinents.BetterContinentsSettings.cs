@@ -649,6 +649,33 @@ namespace BetterContinents
                 }
             }
             
+            public static BetterContinentsSettings LoadFromSource(string path, FileHelpers.FileSource fileSource)
+            {
+                var fileReader = new FileReader(path, fileSource);
+                try
+                {
+                    var binaryReader = (BinaryReader)fileReader;
+                    int count = binaryReader.ReadInt32();
+                    return Load(new ZPackage(binaryReader.ReadBytes(count)));
+                }
+                finally
+                {
+                    fileReader.Dispose();
+                }
+            }
+
+            public void SaveToSource(string path, FileHelpers.FileSource fileSource)
+            {
+                var zpackage = new ZPackage();
+                Serialize(zpackage);
+
+                byte[] binaryData = zpackage.GetArray();
+                var fileWriter = new FileWriter(path, FileHelpers.FileHelperType.Binary, fileSource);
+                fileWriter.m_binary.Write(binaryData.Length);
+                fileWriter.m_binary.Write(binaryData);
+                fileWriter.Finish();
+            }
+            
             private void Deserialize(ZPackage pkg)
             {
                 Version = pkg.ReadInt();

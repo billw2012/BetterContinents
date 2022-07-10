@@ -75,8 +75,10 @@ namespace BetterContinents
         public static void Log(string msg) => Debug.Log($"[BetterContinents] {msg}");
         public static void LogError(string msg) => Debug.LogError($"[BetterContinents] {msg}");
 
-        public static bool AllowDebugActions => ZNet.instance && ZNet.instance.IsServer() &&
-                                                Settings.EnabledForThisWorld && ConfigDebugModeEnabled.Value;
+        public static bool AllowDebugActions => ZNet.instance 
+                                                && ZNet.instance.IsServer() 
+                                                && Settings.EnabledForThisWorld 
+                                                && ConfigDebugModeEnabled.Value;
 
         public static BetterContinentsSettings Settings;
 

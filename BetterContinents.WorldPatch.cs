@@ -93,8 +93,9 @@ namespace BetterContinents
                 string bcConfigFile = __instance.GetMetaPath() + BetterContinents.ConfigFileExtension;
                 string newName = bcConfigFile + ".new";
                 string oldName = bcConfigFile + ".old";
-                settingsToSave.Save(newName);
+                settingsToSave.SaveToSource(newName, __instance.m_fileSource);
                 FileHelpers.ReplaceOldFile(bcConfigFile, newName, oldName, __instance.m_fileSource);
+
                 // if (File.Exists(bcConfigFile))
                 // {
                 //     if (File.Exists(oldName))
