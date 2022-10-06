@@ -125,7 +125,9 @@ namespace BetterContinents
             if (dropdown != null)
             {
                 dropdown.ClearOptions();
-                dropdown.AddOptions(presets.Select(NameFromPath).ToList());
+                var presetNames = presets.Select(NameFromPath).ToList();
+                Debug.Log($"Preset names = {string.Join(", ", presetNames)}");
+                dropdown.AddOptions(presetNames);
                 int idx = presets.FindIndex(p => string.Equals(p, BetterContinents.ConfigSelectedPreset.Value,
                     StringComparison.CurrentCultureIgnoreCase));
                 if (idx != -1)

@@ -1,4 +1,5 @@
-﻿using System.IO;
+﻿using System;
+using System.IO;
 using HarmonyLib;
 
 namespace BetterContinents
@@ -67,7 +68,9 @@ namespace BetterContinents
             // When the world metadata is saved we write an extra file next to it for our own config
             // Do this as a Postfix because the targeted directory (and thus the GetMetaPath() result) might change
             // if the world is being "upgraded" to the new save location.
-            [HarmonyPostfix, HarmonyPatch(nameof(World.SaveWorldMetaData))]
+            [HarmonyPostfix, HarmonyPatch(nameof(World.SaveWorldMetaData), 
+                 new [] { typeof(DateTime), typeof(bool), typeof(FileWriter) }, 
+                 new[] { ArgumentType.Normal, ArgumentType.Out, ArgumentType.Out })]
             private static void SaveWorldMetaDataPostfix(World __instance)
             {
                 Log($"[Saving][{__instance.m_name}] Saving settings for {__instance.m_name}");

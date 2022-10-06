@@ -1,4 +1,5 @@
-﻿using System.ComponentModel;
+﻿using System;
+using System.ComponentModel;
 using System.IO;
 using HarmonyLib;
 using UnityEngine.UI;
@@ -56,58 +57,58 @@ namespace BetterContinents
                 //
             }
 
-            [HarmonyPrefix, HarmonyPatch("MoveWorld")]
-            private static void MoveWorldPrefix(FejdStartup __instance, World ___m_world, BackgroundWorker ___m_moveFileWorker)
-            {
-                // Same early out conditions as MoveWorld
-                if (___m_world == null || ___m_moveFileWorker != null)
-                {
-                    return;
-                }
-                
-                // Move the .BetterContinents file if it exists. Not doing this async, unlike the rest of the copy, and it
-                // might be by far the slowest bit.
-                var moveTarget = __instance.GetMoveTarget(___m_world.m_fileSource);
-                string sourcePath = ___m_world.GetMetaPath() + BetterContinents.ConfigFileExtension;
-                string targetPath = ___m_world.GetMetaPath(moveTarget) + BetterContinents.ConfigFileExtension;
-                if (moveTarget == FileHelpers.FileSource.SteamCloud)
-                {
-                    if (File.Exists(sourcePath))
-                    {
-                        Log( $"Copying BetterContinents config file from {sourcePath} to {targetPath}");
-                        FileHelpers.FileCopyIntoSteam(sourcePath, targetPath);
-                    }
-                }
-                else if (___m_world.m_fileSource == FileHelpers.FileSource.SteamCloud)
-                {
-                    if (FileHelpers.FileExistsSteam(sourcePath))
-                    {
-                        Log( $"Copying BetterContinents config file from {sourcePath} to {targetPath}");
-                        FileHelpers.FileCopyOutFromSteam(sourcePath, targetPath, true);
-                    }
-                }
-                else
-                {
-                    string directoryName = Path.GetDirectoryName(targetPath);
-                    if (!Directory.Exists(directoryName))
-                    {
-                        Directory.CreateDirectory(directoryName);
-                    }
-                    if (File.Exists(sourcePath))
-                    {
-                        Log( $"Copying BetterContinents config file from {sourcePath} to {targetPath}");
-                        File.Copy(sourcePath, targetPath);
-                    }
-                }
-                if (___m_world.m_fileSource != FileHelpers.FileSource.SteamCloud)
-                {
-                    if (File.Exists(sourcePath))
-                    {
-                        Log( $"Moving old BetterContinents config file from {sourcePath} to backup");
-                        FileHelpers.MoveToBackup(sourcePath);
-                    }
-                }
-            }
+            // [HarmonyPrefix, HarmonyPatch("MoveWorld")]
+            // private static void MoveWorldPrefix(FejdStartup __instance, World ___m_world, BackgroundWorker ___m_moveFileWorker)
+            // {
+            //     // Same early out conditions as MoveWorld
+            //     if (___m_world == null || ___m_moveFileWorker != null)
+            //     {
+            //         return;
+            //     }
+            //     
+            //     // Move the .BetterContinents file if it exists. Not doing this async, unlike the rest of the copy, and it
+            //     // might be by far the slowest bit.
+            //     var moveTarget = __instance.GetMoveTarget(___m_world.m_fileSource);
+            //     string sourcePath = ___m_world.GetMetaPath() + BetterContinents.ConfigFileExtension;
+            //     string targetPath = ___m_world.GetMetaPath(moveTarget) + BetterContinents.ConfigFileExtension;
+            //     if (moveTarget == FileHelpers.FileSource.Cloud)
+            //     {
+            //         if (File.Exists(sourcePath))
+            //         {
+            //             Log( $"Copying BetterContinents config file from {sourcePath} to {targetPath}");
+            //             FileHelpers.FileCopyIntoCloud(sourcePath, targetPath);
+            //         }
+            //     }
+            //     else if (___m_world.m_fileSource == FileHelpers.FileSource.Cloud)
+            //     {
+            //         if (FileHelpers.FileExistsCloud(sourcePath))
+            //         {
+            //             Log( $"Copying BetterContinents config file from {sourcePath} to {targetPath}");
+            //             FileHelpers.FileCopyOutFromCloud(sourcePath, targetPath, true);
+            //         }
+            //     }
+            //     else
+            //     {
+            //         string directoryName = Path.GetDirectoryName(targetPath);
+            //         if (!Directory.Exists(directoryName))
+            //         {
+            //             Directory.CreateDirectory(directoryName);
+            //         }
+            //         if (File.Exists(sourcePath))
+            //         {
+            //             Log( $"Copying BetterContinents config file from {sourcePath} to {targetPath}");
+            //             File.Copy(sourcePath, targetPath);
+            //         }
+            //     }
+            //     if (___m_world.m_fileSource != FileHelpers.FileSource.Cloud)
+            //     {
+            //         if (File.Exists(sourcePath))
+            //         {
+            //             Log( $"Moving old BetterContinents config file from {sourcePath} to backup");
+            //             FileHelpers.MoveToBackup(sourcePath, DateTime.Now);
+            //         }
+            //     }
+            // }
 
             [HarmonyPrefix, HarmonyPatch("OnNewWorldDone")]
             private static void OnNewWorldDonePrefix()

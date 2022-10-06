@@ -544,7 +544,7 @@ namespace BetterContinents
                     Log($"[Saving][{ZNet.m_world.m_name}] Updating from legacy save");
                     string bcConfigFile = ZNet.m_world.GetMetaPath() + BetterContinents.ConfigFileExtension;
                     Log($"[Saving][{ZNet.m_world.m_name}] Backing up {bcConfigFile}");
-                    FileHelpers.MoveToBackup(ZNet.m_world.GetMetaPath() + BetterContinents.ConfigFileExtension);
+                    FileHelpers.MoveToBackup(ZNet.m_world.GetMetaPath() + BetterContinents.ConfigFileExtension, DateTime.Now);
                 }
             }
         }

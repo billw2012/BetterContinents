@@ -42,15 +42,15 @@
       <HintPath>lib\BepInEx\core\0Harmony.dll</HintPath>
       <Private>False</Private>
     </Reference>
-    <Reference Include="assembly_guiutils, Version=0.0.0.0, Culture=neutral, PublicKeyToken=null">
+    <Reference Include="assembly_guiutils">
       <HintPath>..\..\..\..\..\Program Files (x86)\Steam\steamapps\common\Valheim\valheim_Data\Managed\publicized_assemblies\assembly_guiutils_publicized.dll</HintPath>
       <Private>False</Private>
     </Reference>
-    <Reference Include="assembly_utils, Version=0.0.0.0, Culture=neutral, PublicKeyToken=null">
+    <Reference Include="assembly_utils">
       <HintPath>..\..\..\..\..\Program Files (x86)\Steam\steamapps\common\Valheim\valheim_Data\Managed\publicized_assemblies\assembly_utils_publicized.dll</HintPath>
       <Private>False</Private>
     </Reference>
-    <Reference Include="assembly_valheim, Version=0.0.0.0, Culture=neutral, PublicKeyToken=null">
+    <Reference Include="assembly_valheim">
       <HintPath>..\..\..\..\..\Program Files (x86)\Steam\steamapps\common\Valheim\valheim_Data\Managed\publicized_assemblies\assembly_valheim_publicized.dll</HintPath>
       <Private>False</Private>
     </Reference>
@@ -287,7 +287,7 @@
       <Assemblies Include="$(TargetDir)*.dll;$(TargetDir)*.mdb;$(TargetDir)*.pdb" />
     </ItemGroup>
     <Exec Command="C:\Programs\pdb2mdb\pdb2mdb.exe &quot;$(TargetPath)&quot;" />
-    <Copy SourceFiles="@(Assemblies)" DestinationFolder="C:\program files (x86)\steam\steamapps\common\Valheim\BepInEx\plugins" />
+    <Copy SourceFiles="@(Assemblies)" DestinationFolder="C:\Program Files (x86)\Steam\steamapps\common\Valheim\BepInEx\plugins" />
   </Target>
   <Import Project="packages\Fody.6.3.0\build\Fody.targets" Condition="Exists('packages\Fody.6.3.0\build\Fody.targets')" />
     <Target Name="EnsureNuGetPackageBuildImports" BeforeTargets="PrepareForBuild">
