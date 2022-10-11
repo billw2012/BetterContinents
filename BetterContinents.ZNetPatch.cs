@@ -499,7 +499,15 @@ namespace BetterContinents
                             rpc.Invoke("BetterContinentsConfigPacket", sentBytes, GetHashCode(packet),
                                 new ZPackage(packet));
                             // Make sure to flush or we will saturate the queue...
-                            rpc.GetSocket().Flush();
+                            try
+                            {
+                                rpc.GetSocket().Flush();
+                            }
+                            catch (NotImplementedException)
+                            {
+                                // ZPlayFabSocket doesn't implement it and throws instead
+                            }
+
                             sentBytes += packetSize;
                             Log($"Sent {sentBytes} of {settingsData.Length} bytes");
                             float timeout = Time.time + 30;
