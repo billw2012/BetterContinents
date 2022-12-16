@@ -26,6 +26,9 @@ namespace BetterContinents
             [HarmonyPostfix, HarmonyPatch("Start")]
             private static void StartPostfix(FejdStartup __instance)
             {
+                //if (ZNet.instance.IsDedicated())
+                //    return;
+
                 Log("Start postfix");
                 presets.InitUI(__instance);
                 

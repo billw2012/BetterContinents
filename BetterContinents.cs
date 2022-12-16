@@ -360,10 +360,9 @@ namespace BetterContinents
                             float wx = (float)(j - halfSize) * __instance.m_pixelSize + halfSizeF;
                             float wy = (float)(i - halfSize) * __instance.m_pixelSize + halfSizeF;
                             var biome = WorldGenerator.instance.GetBiome(wx, wy);
-                            float biomeHeight = WorldGenerator.instance.GetBiomeHeight(biome, wx, wy);
+                            float biomeHeight = WorldGenerator.instance.GetBiomeHeight(biome, wx, wy, out _);
                             mapPixels[i * __instance.m_textureSize + j] = __instance.GetPixelColor(biome);
-                            forestPixels[i * __instance.m_textureSize + j] =
-                                __instance.GetMaskColor(wx, wy, biomeHeight, biome);
+                            forestPixels[i * __instance.m_textureSize + j] = __instance.GetMaskColor(wx, wy, biomeHeight, biome);
                             heightPixels[i * __instance.m_textureSize + j] = new Color(biomeHeight, 0f, 0f);
                             Interlocked.Increment(ref progress);
                         }

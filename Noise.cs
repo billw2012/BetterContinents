@@ -365,7 +365,7 @@ namespace BetterContinents
         public static NoiseStackSettings Default()
         {
             var val = new NoiseStackSettings();
-            val.NoiseLayers.Add(new NoiseLayer());
+            // val.NoiseLayers.Add(new NoiseLayer());
             return val;
         }
 

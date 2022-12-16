@@ -626,18 +626,18 @@ namespace BetterContinents
                     if (data.m_distantLod)
                     {
                         Heightmap.Biome biome5 = worldGen.GetBiome(wx, wy);
-                        value = worldGen.GetBiomeHeight(biome5, wx, wy);
+                        value = worldGen.GetBiomeHeight(biome5, wx, wy, out _);
                     }
                     else if (biome3 == biome && biome2 == biome && biome4 == biome)
                     {
-                        value = worldGen.GetBiomeHeight(biome, wx, wy);
+                        value = worldGen.GetBiomeHeight(biome, wx, wy, out _);
                     }
                     else
                     {
-                        float biomeHeight = worldGen.GetBiomeHeight(biome, wx, wy);
-                        float biomeHeight2 = worldGen.GetBiomeHeight(biome2, wx, wy);
-                        float biomeHeight3 = worldGen.GetBiomeHeight(biome3, wx, wy);
-                        float biomeHeight4 = worldGen.GetBiomeHeight(biome4, wx, wy);
+                        float biomeHeight = worldGen.GetBiomeHeight(biome, wx, wy, out _);
+                        float biomeHeight2 = worldGen.GetBiomeHeight(biome2, wx, wy, out _);
+                        float biomeHeight3 = worldGen.GetBiomeHeight(biome3, wx, wy, out _);
+                        float biomeHeight4 = worldGen.GetBiomeHeight(biome4, wx, wy, out _);
                         float a = Mathf.Lerp(biomeHeight, biomeHeight2, t2);
                         float b = Mathf.Lerp(biomeHeight3, biomeHeight4, t2);
                         value = Mathf.Lerp(a, b, t);
